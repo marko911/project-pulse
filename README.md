@@ -6,7 +6,7 @@ Unlike general-purpose indexers, Project Pulse focuses on two non-negotiable goa
 
 ## Architecture Diagram
 
-![Project Pulse architecture diagram](docs/architecture-diagram.svg)
+![Project Pulse architecture diagram](docs/architecture.svg)
 
 ## Architectural Philosophy
 
