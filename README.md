@@ -6,6 +6,8 @@ Unlike general-purpose indexers, Project Pulse focuses on two non-negotiable goa
 
 ## Architecture Diagram
 
+![Project Pulse architecture diagram](docs/architecture-diagram.svg)
+
 ## Architectural Philosophy
 
 The system design allows us to make "no-regret" moves for a future where users run compute directly next to the data. The architecture is driven by three core tenets:
