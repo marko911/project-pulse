@@ -79,7 +79,7 @@
   <rect width="1400" height="1100" fill="url(#grid)"/>
 
   <!-- Title -->
-  <text x="700" y="45" text-anchor="middle" fill="#ffffff" font-size="28" font-weight="700" letter-spacing="0.5">MIRADOR</text>
+  <text x="700" y="45" text-anchor="middle" fill="#ffffff" font-size="28" font-weight="700" letter-spacing="0.5">Project Pulse</text>
   <text x="700" y="70" text-anchor="middle" fill="#9CA3AF" font-size="14" font-weight="400">High-Throughput Blockchain Data Platform • &lt;50ms Latency • Exactly-Once Delivery</text>
 
   <!-- ═══════════════════════════════════════════════════════════════ -->
