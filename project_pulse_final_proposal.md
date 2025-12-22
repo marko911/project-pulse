@@ -1,8 +1,6 @@
-# Mirador Hybrid Architecture Proposal (Final)
+# Project Pulse Architecture Proposal
 
-This document is written to drive an implementation plan across application and infrastructure layers (Terraform-managed).
-
-## Mirador is a high-throughput, ultra-low-latency blockchain data platform that ingests real-time events from Solana and EVM chains, normalizes and enriches them into a canonical event stream, and delivers them to customers via WebSockets, gRPC streaming, REST, and webhooks—while guaranteeing reorg-aware correction semantics and “exactly-once” delivery within each commitment level, plus provable completeness for finalized data through manifests and continuous reconciliation. It also provides tiered storage (hot for recent query + state, cold for long-term archive/analytics) and, in Phase 2, enables customers to deploy their own low-latency compute modules (WASM/V8 serverless functions with per-tenant quotas and durable state) so their logic can run next to the data stream for minimal latency.
+Project Pulse is a high-throughput, ultra-low-latency blockchain data platform that ingests real-time events from Solana and EVM chains, normalizes and enriches them into a canonical event stream, and delivers them to customers via WebSockets, gRPC streaming, REST, and webhooks—while guaranteeing reorg-aware correction semantics and “exactly-once” delivery within each commitment level, plus provable completeness for finalized data through manifests and continuous reconciliation. It also provides tiered storage (hot for recent query + state, cold for long-term archive/analytics) and, in Phase 2, enables customers to deploy their own low-latency compute modules (WASM/V8 serverless functions with per-tenant quotas and durable state) so their logic can run next to the data stream for minimal latency.
 
 ## 1. Goals and Non-Goals
 
@@ -34,7 +32,7 @@ This document is written to drive an implementation plan across application and 
 ### 1.3 Non-Goals (initially)
 
 - Multi-region active/active. Phase 2 will be active/passive first.
-- General-purpose stream processing platform (we focus on Mirador’s canonical schema + delivery + compute).
+- General-purpose stream processing platform (we focus on Project Pulse’s canonical schema + delivery + compute).
 
 ---
 
@@ -587,4 +585,4 @@ Use the Claude-style structure with separate cmd entrypoints and internal interf
 
 When communicating externally, claims should be limited to:
 
-> For the finalized stream, for any block range [A..B] reported as “verified,” Mirador can provide manifests for each block and show reconciliation passing (no gaps, continuity, and count/hash agreement), with full schema validity.
+> For the finalized stream, for any block range [A..B] reported as “verified,” Project Pulse can provide manifests for each block and show reconciliation passing (no gaps, continuity, and count/hash agreement), with full schema validity.

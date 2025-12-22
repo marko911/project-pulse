@@ -1,10 +1,10 @@
-# Product Guide: Mirador
+# Product Guide: Project Pulse
 
 ## Initial Concept
-Mirador is a high-throughput, ultra-low-latency blockchain data platform that ingests real-time events from Solana and EVM chains. It normalizes and enriches these events into a canonical stream and delivers them to customers via WebSockets, gRPC streaming, REST, and webhooks. Key differentiators include reorg-aware correction semantics, "exactly-once" delivery guarantees within commitment levels, and provable completeness for finalized data.
+Project Pulse is a high-throughput, ultra-low-latency blockchain data platform that ingests real-time events from Solana and EVM chains. It normalizes and enriches these events into a canonical stream and delivers them to customers via WebSockets, gRPC streaming, REST, and webhooks. Key differentiators include reorg-aware correction semantics, "exactly-once" delivery guarantees within commitment levels, and provable completeness for finalized data.
 
 ## Target Audience
-The primary users for Mirador are:
+The primary users for Project Pulse are:
 - **DeFi Developers:** Teams building protocols or trading bots that require ultra-low latency data for critical operations like liquidations, arbitrage, and real-time market making.
 - **Compute-proximal Platforms:** Applications that need to run custom logic (WASM/V8) directly adjacent to the data stream to minimize network hops and latency.
 

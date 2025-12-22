@@ -1,7 +1,7 @@
 # Track Spec: Milestone 1 - Ingestion & Canonical Stream MVP
 
 ## Goal
-Establish the foundational infrastructure for Mirador. This includes setting up the Go repository structure, defining the canonical Protobuf schema, implementing the basic Solana and EVM adapters, and creating the core processor to normalize events into a standard format.
+Establish the foundational infrastructure for Project Pulse. This includes setting up the Go repository structure, defining the canonical Protobuf schema, implementing the basic Solana and EVM adapters, and creating the core processor to normalize events into a standard format.
 
 ## Scope
 - **Repo Structure:** Implement the standard `cmd/`, `internal/`, `pkg/` layout.

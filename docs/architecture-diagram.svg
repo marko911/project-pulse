@@ -1,0 +1,517 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1400 1100" font-family="Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif">
+  <defs>
+    <!-- Gradients -->
+    <linearGradient id="bgGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#0f0f23"/>
+      <stop offset="100%" style="stop-color:#1a1a3e"/>
+    </linearGradient>
+
+    <linearGradient id="solanaGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#9945FF"/>
+      <stop offset="100%" style="stop-color:#14F195"/>
+    </linearGradient>
+
+    <linearGradient id="evmGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#627EEA"/>
+      <stop offset="100%" style="stop-color:#8B9FFF"/>
+    </linearGradient>
+
+    <linearGradient id="brokerGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#FF6B6B"/>
+      <stop offset="100%" style="stop-color:#FF8E8E"/>
+    </linearGradient>
+
+    <linearGradient id="processingGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#4ECDC4"/>
+      <stop offset="100%" style="stop-color:#6EE7DE"/>
+    </linearGradient>
+
+    <linearGradient id="storageGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#45B7D1"/>
+      <stop offset="100%" style="stop-color:#67D1E8"/>
+    </linearGradient>
+
+    <linearGradient id="deliveryGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#96CEB4"/>
+      <stop offset="100%" style="stop-color:#B8E0CC"/>
+    </linearGradient>
+
+    <linearGradient id="correctnessGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#DDA0DD"/>
+      <stop offset="100%" style="stop-color:#E8C0E8"/>
+    </linearGradient>
+
+    <linearGradient id="computeGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#FFB347"/>
+      <stop offset="100%" style="stop-color:#FFCC80"/>
+    </linearGradient>
+
+    <!-- Drop shadow filter -->
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="4" stdDeviation="6" flood-color="#000" flood-opacity="0.3"/>
+    </filter>
+
+    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="3" result="coloredBlur"/>
+      <feMerge>
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+
+    <!-- Arrow marker -->
+    <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#6B7280"/>
+    </marker>
+
+    <marker id="arrowheadWhite" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#9CA3AF"/>
+    </marker>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1400" height="1100" fill="url(#bgGradient)"/>
+
+  <!-- Grid pattern (subtle) -->
+  <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+    <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#ffffff" stroke-opacity="0.03" stroke-width="1"/>
+  </pattern>
+  <rect width="1400" height="1100" fill="url(#grid)"/>
+
+  <!-- Title -->
+  <text x="700" y="45" text-anchor="middle" fill="#ffffff" font-size="28" font-weight="700" letter-spacing="0.5">MIRADOR</text>
+  <text x="700" y="70" text-anchor="middle" fill="#9CA3AF" font-size="14" font-weight="400">High-Throughput Blockchain Data Platform • &lt;50ms Latency • Exactly-Once Delivery</text>
+
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <!-- DATA SOURCES LAYER -->
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+
+  <!-- Solana Source -->
+  <g filter="url(#shadow)">
+    <rect x="180" y="100" width="200" height="80" rx="12" fill="#1E1E3F" stroke="url(#solanaGrad)" stroke-width="2"/>
+    <text x="280" y="130" text-anchor="middle" fill="#ffffff" font-size="14" font-weight="600">SOLANA</text>
+    <text x="280" y="150" text-anchor="middle" fill="#9CA3AF" font-size="11">Yellowstone / Geyser gRPC</text>
+    <text x="280" y="168" text-anchor="middle" fill="#6B7280" font-size="10">&gt;50k events/sec</text>
+  </g>
+
+  <!-- EVM Source -->
+  <g filter="url(#shadow)">
+    <rect x="1020" y="100" width="200" height="80" rx="12" fill="#1E1E3F" stroke="url(#evmGrad)" stroke-width="2"/>
+    <text x="1120" y="130" text-anchor="middle" fill="#ffffff" font-size="14" font-weight="600">EVM CHAINS</text>
+    <text x="1120" y="150" text-anchor="middle" fill="#9CA3AF" font-size="11">WebSocket / JSON-RPC</text>
+    <text x="1120" y="168" text-anchor="middle" fill="#6B7280" font-size="10">&gt;1k events/sec</text>
+  </g>
+
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <!-- INGESTION LAYER -->
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+
+  <!-- Solana Adapter -->
+  <g filter="url(#shadow)">
+    <rect x="150" y="210" width="260" height="70" rx="10" fill="url(#solanaGrad)" fill-opacity="0.15" stroke="#9945FF" stroke-width="1.5"/>
+    <text x="280" y="237" text-anchor="middle" fill="#E8E8FF" font-size="13" font-weight="600">Solana Adapter</text>
+    <text x="280" y="257" text-anchor="middle" fill="#A8A8D8" font-size="10">Parse • Normalize • Commitment Mapping</text>
+    <text x="280" y="272" text-anchor="middle" fill="#7878A8" font-size="9">processed | confirmed | finalized</text>
+  </g>
+
+  <!-- EVM Adapter -->
+  <g filter="url(#shadow)">
+    <rect x="990" y="210" width="260" height="70" rx="10" fill="url(#evmGrad)" fill-opacity="0.15" stroke="#627EEA" stroke-width="1.5"/>
+    <text x="1120" y="237" text-anchor="middle" fill="#E8E8FF" font-size="13" font-weight="600">EVM Adapter(s)</text>
+    <text x="1120" y="257" text-anchor="middle" fill="#A8A8D8" font-size="10">Parse • Normalize • Commitment Mapping</text>
+    <text x="1120" y="272" text-anchor="middle" fill="#7878A8" font-size="9">processed | confirmed | finalized</text>
+  </g>
+
+  <!-- Backfill Orchestrator -->
+  <g filter="url(#shadow)">
+    <rect x="490" y="210" width="180" height="50" rx="8" fill="#2A2A4A" stroke="#6B7280" stroke-width="1" stroke-dasharray="4,2"/>
+    <text x="580" y="237" text-anchor="middle" fill="#9CA3AF" font-size="11" font-weight="500">Backfill Orchestrator</text>
+    <text x="580" y="252" text-anchor="middle" fill="#6B7280" font-size="9">Targeted Ranges</text>
+  </g>
+
+  <!-- Quorum Producer -->
+  <g filter="url(#shadow)">
+    <rect x="730" y="210" width="180" height="50" rx="8" fill="#2A2A4A" stroke="#6B7280" stroke-width="1" stroke-dasharray="4,2"/>
+    <text x="820" y="237" text-anchor="middle" fill="#9CA3AF" font-size="11" font-weight="500">Quorum Producer</text>
+    <text x="820" y="252" text-anchor="middle" fill="#6B7280" font-size="9">EVM Integrity Mode (Optional)</text>
+  </g>
+
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <!-- BROKER BACKBONE -->
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+
+  <g filter="url(#shadow)">
+    <rect x="100" y="310" width="1200" height="90" rx="12" fill="url(#brokerGrad)" fill-opacity="0.1" stroke="#FF6B6B" stroke-width="2"/>
+    <text x="700" y="335" text-anchor="middle" fill="#FF8E8E" font-size="15" font-weight="700">BROKER BACKBONE</text>
+    <text x="700" y="352" text-anchor="middle" fill="#FFA8A8" font-size="11">Redpanda / Kafka</text>
+
+    <!-- Topics -->
+    <g>
+      <rect x="140" y="365" width="180" height="26" rx="4" fill="#3A2A2A" stroke="#FF6B6B" stroke-width="1"/>
+      <text x="230" y="382" text-anchor="middle" fill="#FFB8B8" font-size="10">events.&lt;chain&gt;.processed</text>
+    </g>
+    <g>
+      <rect x="340" y="365" width="180" height="26" rx="4" fill="#3A2A2A" stroke="#FF6B6B" stroke-width="1"/>
+      <text x="430" y="382" text-anchor="middle" fill="#FFB8B8" font-size="10">events.&lt;chain&gt;.confirmed</text>
+    </g>
+    <g>
+      <rect x="540" y="365" width="180" height="26" rx="4" fill="#3A2A2A" stroke="#FF6B6B" stroke-width="1"/>
+      <text x="630" y="382" text-anchor="middle" fill="#FFB8B8" font-size="10">events.&lt;chain&gt;.finalized</text>
+    </g>
+    <g>
+      <rect x="740" y="365" width="180" height="26" rx="4" fill="#3A2A2A" stroke="#FF6B6B" stroke-width="1"/>
+      <text x="830" y="382" text-anchor="middle" fill="#FFB8B8" font-size="10">backfill.events.&lt;chain&gt;</text>
+    </g>
+    <g>
+      <rect x="940" y="365" width="180" height="26" rx="4" fill="#3A2A2A" stroke="#FF6B6B" stroke-width="1" stroke-dasharray="3,2"/>
+      <text x="1030" y="382" text-anchor="middle" fill="#FF9898" font-size="10" font-style="italic">*.quorum (optional)</text>
+    </g>
+  </g>
+
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <!-- PROCESSING CORE -->
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+
+  <g filter="url(#shadow)">
+    <rect x="100" y="430" width="740" height="110" rx="12" fill="url(#processingGrad)" fill-opacity="0.1" stroke="#4ECDC4" stroke-width="2"/>
+    <text x="470" y="455" text-anchor="middle" fill="#6EE7DE" font-size="15" font-weight="700">PROCESSING CORE</text>
+
+    <!-- Processing stages -->
+    <g>
+      <rect x="120" y="470" width="100" height="55" rx="6" fill="#1A3A3A" stroke="#4ECDC4" stroke-width="1"/>
+      <text x="170" y="493" text-anchor="middle" fill="#B8E8E8" font-size="10" font-weight="500">Schema</text>
+      <text x="170" y="508" text-anchor="middle" fill="#B8E8E8" font-size="10" font-weight="500">Validation</text>
+      <text x="170" y="520" text-anchor="middle" fill="#78A8A8" font-size="8">Protobuf</text>
+    </g>
+
+    <g>
+      <rect x="235" y="470" width="100" height="55" rx="6" fill="#1A3A3A" stroke="#4ECDC4" stroke-width="1"/>
+      <text x="285" y="493" text-anchor="middle" fill="#B8E8E8" font-size="10" font-weight="500">Deterministic</text>
+      <text x="285" y="508" text-anchor="middle" fill="#B8E8E8" font-size="10" font-weight="500">Event ID</text>
+      <text x="285" y="520" text-anchor="middle" fill="#78A8A8" font-size="8">Idempotent</text>
+    </g>
+
+    <g>
+      <rect x="350" y="470" width="100" height="55" rx="6" fill="#1A3A3A" stroke="#4ECDC4" stroke-width="1"/>
+      <text x="400" y="493" text-anchor="middle" fill="#B8E8E8" font-size="10" font-weight="500">Transactional</text>
+      <text x="400" y="508" text-anchor="middle" fill="#B8E8E8" font-size="10" font-weight="500">Outbox</text>
+      <text x="400" y="520" text-anchor="middle" fill="#78A8A8" font-size="8">Exactly-Once</text>
+    </g>
+
+    <g>
+      <rect x="465" y="470" width="100" height="55" rx="6" fill="#1A3A3A" stroke="#4ECDC4" stroke-width="1"/>
+      <text x="515" y="493" text-anchor="middle" fill="#B8E8E8" font-size="10" font-weight="500">Reorg</text>
+      <text x="515" y="508" text-anchor="middle" fill="#B8E8E8" font-size="10" font-weight="500">Detection</text>
+      <text x="515" y="520" text-anchor="middle" fill="#78A8A8" font-size="8">Tombstones</text>
+    </g>
+
+    <g>
+      <rect x="580" y="470" width="100" height="55" rx="6" fill="#1A3A3A" stroke="#4ECDC4" stroke-width="1"/>
+      <text x="630" y="493" text-anchor="middle" fill="#B8E8E8" font-size="10" font-weight="500">Enrichment</text>
+      <text x="630" y="508" text-anchor="middle" fill="#88C8C8" font-size="9">Prices • Labels</text>
+      <text x="630" y="520" text-anchor="middle" fill="#78A8A8" font-size="8">Tokens</text>
+    </g>
+
+    <g>
+      <rect x="695" y="470" width="130" height="55" rx="6" fill="#1A3A3A" stroke="#4ECDC4" stroke-width="1"/>
+      <text x="760" y="493" text-anchor="middle" fill="#B8E8E8" font-size="10" font-weight="500">Cross-Chain</text>
+      <text x="760" y="508" text-anchor="middle" fill="#88C8C8" font-size="9">Correlation</text>
+      <text x="760" y="520" text-anchor="middle" fill="#78A8A8" font-size="8">Windowed Aggregates</text>
+    </g>
+  </g>
+
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <!-- CORRECTNESS TOOLING -->
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+
+  <g filter="url(#shadow)">
+    <rect x="870" y="430" width="430" height="110" rx="12" fill="url(#correctnessGrad)" fill-opacity="0.1" stroke="#DDA0DD" stroke-width="2"/>
+    <text x="1085" y="455" text-anchor="middle" fill="#E8C0E8" font-size="15" font-weight="700">CORRECTNESS TOOLING</text>
+    <text x="1085" y="468" text-anchor="middle" fill="#C090C0" font-size="9">Always-On • Finalized Stream</text>
+
+    <g>
+      <rect x="890" y="478" width="95" height="50" rx="6" fill="#3A2A3A" stroke="#DDA0DD" stroke-width="1"/>
+      <text x="937" y="498" text-anchor="middle" fill="#E8D0E8" font-size="10" font-weight="500">Gap Detector</text>
+      <text x="937" y="515" text-anchor="middle" fill="#A880A8" font-size="8">Real-time</text>
+    </g>
+
+    <g>
+      <rect x="995" y="478" width="95" height="50" rx="6" fill="#3A2A3A" stroke="#DDA0DD" stroke-width="1"/>
+      <text x="1042" y="498" text-anchor="middle" fill="#E8D0E8" font-size="10" font-weight="500">Manifest</text>
+      <text x="1042" y="510" text-anchor="middle" fill="#E8D0E8" font-size="10" font-weight="500">Builder</text>
+      <text x="1042" y="522" text-anchor="middle" fill="#A880A8" font-size="8">Audit Trail</text>
+    </g>
+
+    <g>
+      <rect x="1100" y="478" width="95" height="50" rx="6" fill="#3A2A3A" stroke="#DDA0DD" stroke-width="1"/>
+      <text x="1147" y="498" text-anchor="middle" fill="#E8D0E8" font-size="10" font-weight="500">Reconciliation</text>
+      <text x="1147" y="515" text-anchor="middle" fill="#A880A8" font-size="8">3-Tier Verify</text>
+    </g>
+
+    <g>
+      <rect x="1205" y="478" width="80" height="50" rx="6" fill="#3A2A3A" stroke="#DDA0DD" stroke-width="1" stroke-dasharray="3,2"/>
+      <text x="1245" y="498" text-anchor="middle" fill="#D0B0D0" font-size="10" font-weight="500">Dual-Src</text>
+      <text x="1245" y="515" text-anchor="middle" fill="#A880A8" font-size="8">Optional</text>
+    </g>
+  </g>
+
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <!-- STORAGE LAYER -->
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+
+  <g filter="url(#shadow)">
+    <rect x="100" y="570" width="1200" height="100" rx="12" fill="url(#storageGrad)" fill-opacity="0.1" stroke="#45B7D1" stroke-width="2"/>
+    <text x="700" y="595" text-anchor="middle" fill="#67D1E8" font-size="15" font-weight="700">STORAGE LAYER</text>
+
+    <!-- Hot Storage -->
+    <g>
+      <rect x="130" y="610" width="280" height="48" rx="8" fill="#1A2A3A" stroke="#45B7D1" stroke-width="1.5"/>
+      <circle cx="155" cy="634" r="8" fill="#FF6B6B"/>
+      <text x="175" y="628" fill="#E8F4F8" font-size="12" font-weight="600">HOT</text>
+      <text x="225" y="628" fill="#A8D0E0" font-size="11">TimescaleDB</text>
+      <text x="270" y="644" text-anchor="middle" fill="#78A0B0" font-size="9">24-72h • events • outbox • manifests</text>
+    </g>
+
+    <!-- Warm Cache -->
+    <g>
+      <rect x="430" y="610" width="280" height="48" rx="8" fill="#1A2A3A" stroke="#45B7D1" stroke-width="1.5"/>
+      <circle cx="455" cy="634" r="8" fill="#FFB347"/>
+      <text x="475" y="628" fill="#E8F4F8" font-size="12" font-weight="600">WARM</text>
+      <text x="535" y="628" fill="#A8D0E0" font-size="11">Redis</text>
+      <text x="570" y="644" text-anchor="middle" fill="#78A0B0" font-size="9">subs • quotas • heads • correlation state</text>
+    </g>
+
+    <!-- Cold Storage -->
+    <g>
+      <rect x="730" y="610" width="280" height="48" rx="8" fill="#1A2A3A" stroke="#45B7D1" stroke-width="1.5"/>
+      <circle cx="755" cy="634" r="8" fill="#4ECDC4"/>
+      <text x="775" y="628" fill="#E8F4F8" font-size="12" font-weight="600">COLD</text>
+      <text x="830" y="628" fill="#A8D0E0" font-size="11">GCS Parquet</text>
+      <text x="870" y="644" text-anchor="middle" fill="#78A0B0" font-size="9">hourly partitions → BigQuery</text>
+    </g>
+
+    <!-- Outbox Publisher -->
+    <g>
+      <rect x="1030" y="610" width="140" height="48" rx="8" fill="#2A3A3A" stroke="#67D1E8" stroke-width="1"/>
+      <text x="1100" y="631" text-anchor="middle" fill="#B8E8F0" font-size="11" font-weight="500">Outbox Publisher</text>
+      <text x="1100" y="648" text-anchor="middle" fill="#78A0B0" font-size="9">Durable Fanout</text>
+    </g>
+  </g>
+
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <!-- OPTIONAL FANOUT SPINE -->
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+
+  <g filter="url(#shadow)">
+    <rect x="540" y="695" width="320" height="40" rx="8" fill="#2A2A3A" stroke="#6B7280" stroke-width="1" stroke-dasharray="4,2"/>
+    <text x="700" y="718" text-anchor="middle" fill="#9CA3AF" font-size="11">Optional Fanout Spine — NATS JetStream (Replayable)</text>
+  </g>
+
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <!-- DELIVERY APIS -->
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+
+  <g filter="url(#shadow)">
+    <rect x="100" y="760" width="1200" height="110" rx="12" fill="url(#deliveryGrad)" fill-opacity="0.1" stroke="#96CEB4" stroke-width="2"/>
+    <text x="700" y="785" text-anchor="middle" fill="#B8E0CC" font-size="15" font-weight="700">DELIVERY APIs</text>
+
+    <!-- WebSocket -->
+    <g>
+      <rect x="130" y="800" width="200" height="55" rx="8" fill="#1A3A2A" stroke="#96CEB4" stroke-width="1.5"/>
+      <text x="230" y="823" text-anchor="middle" fill="#D8F0E0" font-size="12" font-weight="600">WebSocket Gateway</text>
+      <text x="230" y="840" text-anchor="middle" fill="#98C0A8" font-size="10">100k+ concurrent • &lt;10ms fanout</text>
+      <text x="230" y="852" text-anchor="middle" fill="#78A088" font-size="9">Stateless • Subs in Redis</text>
+    </g>
+
+    <!-- gRPC -->
+    <g>
+      <rect x="350" y="800" width="200" height="55" rx="8" fill="#1A3A2A" stroke="#96CEB4" stroke-width="1.5"/>
+      <text x="450" y="823" text-anchor="middle" fill="#D8F0E0" font-size="12" font-weight="600">gRPC Streaming</text>
+      <text x="450" y="840" text-anchor="middle" fill="#98C0A8" font-size="10">High-Throughput Integrations</text>
+      <text x="450" y="852" text-anchor="middle" fill="#78A088" font-size="9">Backpressure • Flow Control</text>
+    </g>
+
+    <!-- Webhooks -->
+    <g>
+      <rect x="570" y="800" width="200" height="55" rx="8" fill="#1A3A2A" stroke="#96CEB4" stroke-width="1.5"/>
+      <text x="670" y="823" text-anchor="middle" fill="#D8F0E0" font-size="12" font-weight="600">Webhook Dispatcher</text>
+      <text x="670" y="840" text-anchor="middle" fill="#98C0A8" font-size="10">Retries • Signatures • DLQ</text>
+      <text x="670" y="852" text-anchor="middle" fill="#78A088" font-size="9">Exponential Backoff</text>
+    </g>
+
+    <!-- REST API -->
+    <g>
+      <rect x="790" y="800" width="200" height="55" rx="8" fill="#1A3A2A" stroke="#96CEB4" stroke-width="1.5"/>
+      <text x="890" y="823" text-anchor="middle" fill="#D8F0E0" font-size="12" font-weight="600">REST / Admin API</text>
+      <text x="890" y="840" text-anchor="middle" fill="#98C0A8" font-size="10">Queries • Manifests • Status</text>
+      <text x="890" y="852" text-anchor="middle" fill="#78A088" font-size="9">Tenants • Keys • Limits</text>
+    </g>
+
+    <!-- Clients Icon -->
+    <g>
+      <rect x="1020" y="800" width="250" height="55" rx="8" fill="#2A4A3A" stroke="#78C8A8" stroke-width="1"/>
+      <text x="1145" y="825" text-anchor="middle" fill="#C8F0D8" font-size="13" font-weight="600">→ CLIENTS</text>
+      <text x="1145" y="845" text-anchor="middle" fill="#88B098" font-size="10">DeFi • Trading Bots • dApps</text>
+    </g>
+  </g>
+
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <!-- PHASE 2: COMPUTE AT THE DATA -->
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+
+  <g filter="url(#shadow)">
+    <rect x="100" y="900" width="1200" height="90" rx="12" fill="url(#computeGrad)" fill-opacity="0.1" stroke="#FFB347" stroke-width="2"/>
+    <text x="150" y="925" fill="#FFB347" font-size="11" font-weight="700">PHASE 2</text>
+    <text x="700" y="925" text-anchor="middle" fill="#FFCC80" font-size="15" font-weight="700">COMPUTE AT THE DATA</text>
+    <text x="700" y="942" text-anchor="middle" fill="#D0A050" font-size="10">WASM-First Serverless Functions</text>
+
+    <!-- Trigger Router -->
+    <g>
+      <rect x="130" y="952" width="160" height="30" rx="5" fill="#3A2A1A" stroke="#FFB347" stroke-width="1"/>
+      <text x="210" y="972" text-anchor="middle" fill="#FFD890" font-size="10" font-weight="500">Trigger Router</text>
+    </g>
+
+    <!-- Invocation Queue -->
+    <g>
+      <rect x="310" y="952" width="160" height="30" rx="5" fill="#3A2A1A" stroke="#FFB347" stroke-width="1"/>
+      <text x="390" y="972" text-anchor="middle" fill="#FFD890" font-size="10" font-weight="500">Invocation Queue</text>
+    </g>
+
+    <!-- WASM Runtime -->
+    <g>
+      <rect x="490" y="952" width="160" height="30" rx="5" fill="#3A2A1A" stroke="#FFB347" stroke-width="1"/>
+      <text x="570" y="972" text-anchor="middle" fill="#FFD890" font-size="10" font-weight="500">WASM Runtime (Wasmtime)</text>
+    </g>
+
+    <!-- Per-tenant KV -->
+    <g>
+      <rect x="670" y="952" width="130" height="30" rx="5" fill="#3A2A1A" stroke="#FFB347" stroke-width="1"/>
+      <text x="735" y="972" text-anchor="middle" fill="#FFD890" font-size="10" font-weight="500">Per-Tenant KV</text>
+    </g>
+
+    <!-- Durable Objects -->
+    <g>
+      <rect x="820" y="952" width="150" height="30" rx="5" fill="#3A2A1A" stroke="#FFB347" stroke-width="1"/>
+      <text x="895" y="972" text-anchor="middle" fill="#FFD890" font-size="10" font-weight="500">Durable Objects</text>
+    </g>
+
+    <!-- Metering -->
+    <g>
+      <rect x="990" y="952" width="160" height="30" rx="5" fill="#3A2A1A" stroke="#FFB347" stroke-width="1"/>
+      <text x="1070" y="972" text-anchor="middle" fill="#FFD890" font-size="10" font-weight="500">Metering + Quotas</text>
+    </g>
+
+    <!-- V8 Badge -->
+    <g>
+      <rect x="1170" y="952" width="100" height="30" rx="5" fill="#2A2A2A" stroke="#A08050" stroke-width="1" stroke-dasharray="3,2"/>
+      <text x="1220" y="972" text-anchor="middle" fill="#B0A080" font-size="10" font-style="italic">V8 (Future)</text>
+    </g>
+  </g>
+
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <!-- DATA FLOW ARROWS -->
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+
+  <!-- Solana to Adapter -->
+  <path d="M 280 180 L 280 205" stroke="#9945FF" stroke-width="2" marker-end="url(#arrowhead)" fill="none"/>
+
+  <!-- EVM to Adapter -->
+  <path d="M 1120 180 L 1120 205" stroke="#627EEA" stroke-width="2" marker-end="url(#arrowhead)" fill="none"/>
+
+  <!-- Adapters to Broker -->
+  <path d="M 280 280 L 280 305" stroke="#9CA3AF" stroke-width="1.5" marker-end="url(#arrowheadWhite)" fill="none"/>
+  <path d="M 1120 280 L 1120 305" stroke="#9CA3AF" stroke-width="1.5" marker-end="url(#arrowheadWhite)" fill="none"/>
+  <path d="M 580 260 L 580 305" stroke="#6B7280" stroke-width="1" marker-end="url(#arrowheadWhite)" fill="none" stroke-dasharray="4,2"/>
+  <path d="M 820 260 L 820 305" stroke="#6B7280" stroke-width="1" marker-end="url(#arrowheadWhite)" fill="none" stroke-dasharray="4,2"/>
+
+  <!-- Broker to Processing Core -->
+  <path d="M 470 400 L 470 425" stroke="#9CA3AF" stroke-width="1.5" marker-end="url(#arrowheadWhite)" fill="none"/>
+
+  <!-- Broker to Correctness -->
+  <path d="M 1085 400 L 1085 425" stroke="#9CA3AF" stroke-width="1.5" marker-end="url(#arrowheadWhite)" fill="none"/>
+
+  <!-- Processing to Storage -->
+  <path d="M 470 540 L 470 565" stroke="#9CA3AF" stroke-width="1.5" marker-end="url(#arrowheadWhite)" fill="none"/>
+
+  <!-- Correctness to Storage -->
+  <path d="M 1085 540 L 1085 545 L 850 545 L 850 565" stroke="#9CA3AF" stroke-width="1" marker-end="url(#arrowheadWhite)" fill="none" stroke-dasharray="3,2"/>
+
+  <!-- Storage to Fanout -->
+  <path d="M 700 670 L 700 690" stroke="#9CA3AF" stroke-width="1.5" marker-end="url(#arrowheadWhite)" fill="none"/>
+
+  <!-- Fanout to Delivery -->
+  <path d="M 700 735 L 700 755" stroke="#9CA3AF" stroke-width="1.5" marker-end="url(#arrowheadWhite)" fill="none"/>
+
+  <!-- Delivery to Compute -->
+  <path d="M 700 870 L 700 895" stroke="#9CA3AF" stroke-width="1" marker-end="url(#arrowheadWhite)" fill="none" stroke-dasharray="4,2"/>
+
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <!-- KEY METRICS BADGES -->
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+
+  <!-- Latency Badge -->
+  <g filter="url(#shadow)">
+    <rect x="30" y="350" width="55" height="55" rx="8" fill="#1E1E3F" stroke="#4ECDC4" stroke-width="1.5"/>
+    <text x="57" y="375" text-anchor="middle" fill="#4ECDC4" font-size="16" font-weight="700">&lt;50</text>
+    <text x="57" y="393" text-anchor="middle" fill="#6EE7DE" font-size="10" font-weight="500">ms e2e</text>
+  </g>
+
+  <!-- Throughput Badge -->
+  <g filter="url(#shadow)">
+    <rect x="1315" y="350" width="55" height="55" rx="8" fill="#1E1E3F" stroke="#FF6B6B" stroke-width="1.5"/>
+    <text x="1342" y="375" text-anchor="middle" fill="#FF6B6B" font-size="16" font-weight="700">50k+</text>
+    <text x="1342" y="393" text-anchor="middle" fill="#FF8E8E" font-size="10" font-weight="500">evt/sec</text>
+  </g>
+
+  <!-- Connections Badge -->
+  <g filter="url(#shadow)">
+    <rect x="30" y="760" width="55" height="55" rx="8" fill="#1E1E3F" stroke="#96CEB4" stroke-width="1.5"/>
+    <text x="57" y="785" text-anchor="middle" fill="#96CEB4" font-size="16" font-weight="700">100k</text>
+    <text x="57" y="803" text-anchor="middle" fill="#B8E0CC" font-size="10" font-weight="500">conns</text>
+  </g>
+
+  <!-- Exactly-Once Badge -->
+  <g filter="url(#shadow)">
+    <rect x="1315" y="760" width="55" height="55" rx="8" fill="#1E1E3F" stroke="#DDA0DD" stroke-width="1.5"/>
+    <text x="1342" y="785" text-anchor="middle" fill="#DDA0DD" font-size="11" font-weight="700">1x</text>
+    <text x="1342" y="803" text-anchor="middle" fill="#E8C0E8" font-size="9" font-weight="500">exactly</text>
+  </g>
+
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <!-- LEGEND -->
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+
+  <g transform="translate(30, 1010)">
+    <text x="0" y="12" fill="#6B7280" font-size="10" font-weight="600">LEGEND:</text>
+
+    <rect x="70" y="3" width="12" height="12" rx="2" fill="url(#solanaGrad)" fill-opacity="0.4" stroke="#9945FF" stroke-width="1"/>
+    <text x="88" y="13" fill="#9CA3AF" font-size="9">Solana</text>
+
+    <rect x="135" y="3" width="12" height="12" rx="2" fill="url(#evmGrad)" fill-opacity="0.4" stroke="#627EEA" stroke-width="1"/>
+    <text x="153" y="13" fill="#9CA3AF" font-size="9">EVM</text>
+
+    <rect x="190" y="3" width="12" height="12" rx="2" fill="url(#brokerGrad)" fill-opacity="0.2" stroke="#FF6B6B" stroke-width="1"/>
+    <text x="208" y="13" fill="#9CA3AF" font-size="9">Broker</text>
+
+    <rect x="255" y="3" width="12" height="12" rx="2" fill="url(#processingGrad)" fill-opacity="0.2" stroke="#4ECDC4" stroke-width="1"/>
+    <text x="273" y="13" fill="#9CA3AF" font-size="9">Processing</text>
+
+    <rect x="335" y="3" width="12" height="12" rx="2" fill="url(#storageGrad)" fill-opacity="0.2" stroke="#45B7D1" stroke-width="1"/>
+    <text x="353" y="13" fill="#9CA3AF" font-size="9">Storage</text>
+
+    <rect x="405" y="3" width="12" height="12" rx="2" fill="url(#deliveryGrad)" fill-opacity="0.2" stroke="#96CEB4" stroke-width="1"/>
+    <text x="423" y="13" fill="#9CA3AF" font-size="9">Delivery</text>
+
+    <rect x="475" y="3" width="12" height="12" rx="2" fill="url(#correctnessGrad)" fill-opacity="0.2" stroke="#DDA0DD" stroke-width="1"/>
+    <text x="493" y="13" fill="#9CA3AF" font-size="9">Correctness</text>
+
+    <rect x="565" y="3" width="12" height="12" rx="2" fill="url(#computeGrad)" fill-opacity="0.2" stroke="#FFB347" stroke-width="1"/>
+    <text x="583" y="13" fill="#9CA3AF" font-size="9">Compute (Phase 2)</text>
+
+    <line x1="670" y1="9" x2="700" y2="9" stroke="#6B7280" stroke-width="1" stroke-dasharray="4,2"/>
+    <text x="710" y="13" fill="#9CA3AF" font-size="9">Optional</text>
+  </g>
+
+  <!-- Tech Stack Footer -->
+  <text x="1370" y="1080" text-anchor="end" fill="#4B5563" font-size="9">Go • Protobuf • Redpanda • TimescaleDB • Redis • GCS • WASM</text>
+</svg>

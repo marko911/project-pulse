@@ -1,4 +1,4 @@
-# Product Guidelines: Mirador
+# Product Guidelines: Project Pulse
 
 ## Engineering Philosophy
 - **Performance First:** Every architectural decision must be weighed against its impact on latency and throughput. Allocations on the hot path should be minimized.

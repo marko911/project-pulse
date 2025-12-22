@@ -1,4 +1,4 @@
-# Tech Stack: Mirador
+# Tech Stack: Project Pulse
 
 ## Core Backend
 - **Language:** Go (primary for adapters, processor, and delivery APIs).
