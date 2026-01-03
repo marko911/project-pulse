@@ -81,7 +81,7 @@ func TestServer_ReadyEndpoint_WhenHalted(t *testing.T) {
 	// Create and configure watermark controller
 	wc := correctness.NewWatermarkController(correctness.DefaultWatermarkConfig(), slog.Default())
 	wc.InitializeChain(1, 100) // Initialize with chain 1
-	wc.Halt("test_source", 1, 100, "test halt")
+	wc.Halt(correctness.HaltSourceManualHold, 1, 100, "test halt")
 	server.SetWatermarkController(wc)
 
 	req := httptest.NewRequest(http.MethodGet, "/ready", nil)
