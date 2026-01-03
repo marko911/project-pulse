@@ -1,0 +1,133 @@
+syntax = "proto3";
+
+package mirador.v1;
+
+option go_package = "github.com/mirador/pulse/pkg/proto/v1;protov1";
+
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/any.proto";
+
+// CommitmentLevel indicates the finality/confidence level of an event.
+enum CommitmentLevel {
+  COMMITMENT_LEVEL_UNSPECIFIED = 0;
+  COMMITMENT_LEVEL_PROCESSED = 1;   // Lowest latency, may change
+  COMMITMENT_LEVEL_CONFIRMED = 2;   // Medium confidence, may change
+  COMMITMENT_LEVEL_FINALIZED = 3;   // Canonical, used for provable completeness
+}
+
+// ReorgAction indicates how to interpret this event in reorg scenarios.
+enum ReorgAction {
+  REORG_ACTION_UNSPECIFIED = 0;
+  REORG_ACTION_NORMAL = 1;    // Standard event, no reorg context
+  REORG_ACTION_RETRACT = 2;   // Tombstone: this event is being removed/orphaned
+  REORG_ACTION_REPLACE = 3;   // Replacement: supersedes a previously retracted event
+}
+
+// Chain identifies the source blockchain.
+enum Chain {
+  CHAIN_UNSPECIFIED = 0;
+  CHAIN_SOLANA = 1;
+  CHAIN_ETHEREUM = 2;
+  CHAIN_POLYGON = 3;
+  CHAIN_ARBITRUM = 4;
+  CHAIN_OPTIMISM = 5;
+  CHAIN_BASE = 6;
+  CHAIN_AVALANCHE = 7;
+  CHAIN_BSC = 8;
+}
+
+// CanonicalEvent is the normalized, cross-chain event representation.
+// All blockchain events are transformed into this canonical format.
+message CanonicalEvent {
+  // Unique deterministic identifier: hash(chain + commitment + block + tx + event_index + schema_version)
+  string event_id = 1;
+
+  // Source blockchain
+  Chain chain = 2;
+
+  // Commitment/finality level
+  CommitmentLevel commitment_level = 3;
+
+  // Block identifier (slot for Solana, block_number for EVM)
+  uint64 block_number = 4;
+
+  // Block hash (base58 for Solana, hex for EVM)
+  string block_hash = 5;
+
+  // Transaction identifier (signature for Solana, tx_hash for EVM)
+  string tx_hash = 6;
+
+  // Index of transaction within block
+  uint32 tx_index = 7;
+
+  // Index of this event within the transaction (for ordering)
+  uint32 event_index = 8;
+
+  // Event type identifier (e.g., "transfer", "swap", "mint", "log")
+  string event_type = 9;
+
+  // Accounts involved in this event
+  repeated string accounts = 10;
+
+  // Block timestamp
+  google.protobuf.Timestamp timestamp = 11;
+
+  // Chain-specific payload (decoded instruction data, log data, etc.)
+  google.protobuf.Any payload = 12;
+
+  // Reorg handling action
+  ReorgAction reorg_action = 13;
+
+  // Schema version for evolution tracking
+  uint32 schema_version = 14;
+
+  // Ingestion timestamp (when Mirador received this event)
+  google.protobuf.Timestamp ingested_at = 15;
+
+  // Optional: reference to replaced event_id (for REPLACE actions)
+  string replaces_event_id = 16;
+
+  // Optional: program/contract address that emitted this event
+  string program_id = 17;
+
+  // Optional: value in native token (lamports for Solana, wei for EVM)
+  uint64 native_value = 18;
+}
+
+// EventBatch is used for bulk transmission of events.
+message EventBatch {
+  repeated CanonicalEvent events = 1;
+
+  // Batch metadata
+  Chain chain = 2;
+  CommitmentLevel commitment_level = 3;
+  uint64 from_block = 4;
+  uint64 to_block = 5;
+}
+
+// Manifest represents the correctness audit trail for a finalized block.
+message Manifest {
+  Chain chain = 1;
+  uint64 block_number = 2;
+  string block_hash = 3;
+  string parent_hash = 4;
+
+  // Expected counts from source
+  uint32 expected_tx_count = 5;
+  uint32 expected_event_count = 6;
+
+  // Actual counts emitted
+  uint32 emitted_tx_count = 7;
+  uint32 emitted_event_count = 8;
+
+  // Hash of all event_ids for integrity verification
+  string event_ids_hash = 9;
+
+  // Sources used for ingestion
+  repeated string sources_used = 10;
+
+  // Timestamps
+  google.protobuf.Timestamp block_timestamp = 11;
+  google.protobuf.Timestamp ingested_at = 12;
+  google.protobuf.Timestamp manifest_created_at = 13;
+}

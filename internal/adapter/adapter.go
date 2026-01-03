@@ -11,6 +11,7 @@ type Event struct {
 	CommitmentLevel string
 	BlockNumber     uint64
 	BlockHash       string
+	ParentHash      string // Parent block hash for chain continuity verification
 	TxHash          string
 	TxIndex         uint32
 	EventIndex      uint32

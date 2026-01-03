@@ -288,6 +288,7 @@ func (s *FileSource) parseEVMFixture(fixture Fixture) ([]adapter.Event, int64, e
 			CommitmentLevel: "finalized",
 			BlockNumber:     block.Number,
 			BlockHash:       block.Hash,
+			ParentHash:      block.ParentHash,
 			EventType:       "block",
 			Timestamp:       timestamp,
 		})
@@ -349,6 +350,7 @@ func (s *FileSource) parseSolanaFixture(fixture Fixture) ([]adapter.Event, int64
 			CommitmentLevel: "finalized",
 			BlockNumber:     block.Slot,
 			BlockHash:       block.Blockhash,
+			ParentHash:      block.PreviousBlockhash,
 			EventType:       "block",
 			Timestamp:       timestamp,
 		})
