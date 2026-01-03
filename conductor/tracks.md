@@ -10,5 +10,8 @@ This file tracks all major tracks for the project. Each track has its own detail
 ## [x] Track: Milestone 2: Exactly-Once & Reorg Corrections
 *Link: [./conductor/tracks/milestone_2_exactly_once_reorgs/](./conductor/tracks/milestone_2_exactly_once_reorgs/)*
 
-## [ ] Track: Milestone 3: Correctness Tooling
+## [x] Track: Milestone 3: Correctness Tooling
 *Link: [./conductor/tracks/milestone_3_correctness_tooling/](./conductor/tracks/milestone_3_correctness_tooling/)*
+
+## [ ] Track: Milestone 4: Performance & WebSocket Scale
+*Link: [./conductor/tracks/milestone_4_performance_scale/](./conductor/tracks/milestone_4_performance_scale/)*
