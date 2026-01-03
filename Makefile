@@ -6,7 +6,7 @@ GO := go
 GOFLAGS := -v
 BINDIR := bin
 PROTODIR := api/proto
-SERVICES := adapter-solana adapter-evm processor fixture-recorder outbox-publisher
+SERVICES := adapter-solana adapter-evm processor fixture-recorder outbox-publisher gap-detector
 
 .PHONY: all build test lint clean proto proto-lint proto-breaking dev up down logs help $(SERVICES)
 
