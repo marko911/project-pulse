@@ -91,6 +91,10 @@ type Router struct {
 	eventsDropped   int64
 	matchesFound    int64
 	routingErrors   int64
+	// Timing metrics for profiling (in nanoseconds)
+	totalMatchTimeNs    int64
+	totalDeliveryTimeNs int64
+	batchesProcessed    int64
 }
 
 // NewRouter creates a new event router.
@@ -198,12 +202,17 @@ func (r *Router) routeBatch(ctx context.Context, events []*protov1.CanonicalEven
 		return nil
 	}
 
+	// Track match time for profiling
+	matchStart := time.Now()
+
 	// Get all matches in a single call
 	matches, err := r.subscriptions.MatchBatch(ctx, events)
 	if err != nil {
 		r.config.Logger.Error("batch match failed", "error", err)
 		return err
 	}
+
+	matchDuration := time.Since(matchStart)
 
 	// Group events by destination (client)
 	destEvents := make(map[string][]*protov1.CanonicalEvent)
@@ -219,6 +228,9 @@ func (r *Router) routeBatch(ctx context.Context, events []*protov1.CanonicalEven
 		}
 	}
 
+	// Track delivery time for profiling
+	deliveryStart := time.Now()
+
 	// Deliver to each destination concurrently
 	var wg sync.WaitGroup
 	for clientID, clientEvents := range destEvents {
@@ -230,8 +242,14 @@ func (r *Router) routeBatch(ctx context.Context, events []*protov1.CanonicalEven
 	}
 	wg.Wait()
 
+	deliveryDuration := time.Since(deliveryStart)
+
+	// Update timing metrics
 	r.mu.Lock()
 	r.eventsRouted += int64(len(events))
+	r.totalMatchTimeNs += matchDuration.Nanoseconds()
+	r.totalDeliveryTimeNs += deliveryDuration.Nanoseconds()
+	r.batchesProcessed++
 	r.mu.Unlock()
 
 	return nil
@@ -305,24 +323,37 @@ func (r *Router) Stats() RouterStats {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
-	return RouterStats{
-		EventsRouted:  r.eventsRouted,
-		EventsDropped: r.eventsDropped,
-		MatchesFound:  r.matchesFound,
-		RoutingErrors: r.routingErrors,
-		QueueLength:   len(r.eventCh),
-		QueueCapacity: cap(r.eventCh),
+	stats := RouterStats{
+		EventsRouted:     r.eventsRouted,
+		EventsDropped:    r.eventsDropped,
+		MatchesFound:     r.matchesFound,
+		RoutingErrors:    r.routingErrors,
+		QueueLength:      len(r.eventCh),
+		QueueCapacity:    cap(r.eventCh),
+		BatchesProcessed: r.batchesProcessed,
 	}
+
+	// Calculate average times per batch
+	if r.batchesProcessed > 0 {
+		stats.AvgMatchTimeUs = float64(r.totalMatchTimeNs) / float64(r.batchesProcessed) / 1000
+		stats.AvgDeliveryTimeUs = float64(r.totalDeliveryTimeNs) / float64(r.batchesProcessed) / 1000
+	}
+
+	return stats
 }
 
 // RouterStats contains router performance metrics.
 type RouterStats struct {
-	EventsRouted  int64
-	EventsDropped int64
-	MatchesFound  int64
-	RoutingErrors int64
-	QueueLength   int
-	QueueCapacity int
+	EventsRouted     int64
+	EventsDropped    int64
+	MatchesFound     int64
+	RoutingErrors    int64
+	QueueLength      int
+	QueueCapacity    int
+	BatchesProcessed int64
+	// Average time per batch in microseconds
+	AvgMatchTimeUs    float64
+	AvgDeliveryTimeUs float64
 }
 
 // InMemoryDestinationRegistry is a simple in-memory destination registry.

@@ -1,0 +1,70 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+# Alerting configuration
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+          # Alertmanager can be added later
+          # - 'alertmanager:9093'
+
+# Load rules once and periodically evaluate them
+rule_files:
+  - '/etc/prometheus/alerts.yml'
+
+scrape_configs:
+  # Pulse services - API Gateway
+  - job_name: 'pulse-api-gateway'
+    static_configs:
+      - targets: ['host.docker.internal:8080']
+    metrics_path: /metrics
+    scrape_interval: 10s
+
+  # Pulse services - Processor
+  - job_name: 'pulse-processor'
+    static_configs:
+      - targets: ['host.docker.internal:9091']
+    metrics_path: /metrics
+    scrape_interval: 10s
+
+  # Pulse services - Reconciler
+  - job_name: 'pulse-reconciler'
+    static_configs:
+      - targets: ['host.docker.internal:9093']
+    metrics_path: /metrics
+    scrape_interval: 30s
+
+  # Pulse services - EVM Adapter
+  - job_name: 'pulse-evm-adapter'
+    static_configs:
+      - targets: ['host.docker.internal:9094']
+    metrics_path: /metrics
+    scrape_interval: 10s
+
+  # Pulse services - Solana Adapter
+  - job_name: 'pulse-solana-adapter'
+    static_configs:
+      - targets: ['host.docker.internal:9095']
+    metrics_path: /metrics
+    scrape_interval: 10s
+
+  # Redpanda internal metrics
+  - job_name: 'redpanda'
+    static_configs:
+      - targets: ['redpanda:9644']
+    metrics_path: /public_metrics
+    scrape_interval: 15s
+
+  # NATS monitoring
+  - job_name: 'nats'
+    static_configs:
+      - targets: ['nats:8222']
+    metrics_path: /varz
+    scrape_interval: 15s
+
+  # Redis (requires redis_exporter sidecar - optional)
+  # - job_name: 'redis'
+  #   static_configs:
+  #     - targets: ['redis-exporter:9121']

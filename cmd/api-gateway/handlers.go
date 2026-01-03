@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"log/slog"
 	"net/http"
+	"net/http/pprof"
 	"strconv"
 	"strings"
 	"time"
@@ -22,6 +23,9 @@ type Server struct {
 	watermark   *correctness.WatermarkController
 	gapDetector *correctness.GapDetector
 	repo        *storage.ManifestRepository
+
+	// WebSocket handler for subscription management
+	wsHandler *WebSocketHandler
 }
 
 // NewServer creates a new API gateway server.
@@ -47,6 +51,11 @@ func (s *Server) SetManifestRepository(r *storage.ManifestRepository) {
 	s.repo = r
 }
 
+// SetWebSocketHandler sets the WebSocket handler for subscription management.
+func (s *Server) SetWebSocketHandler(ws *WebSocketHandler) {
+	s.wsHandler = ws
+}
+
 // Router returns the HTTP handler for the API gateway.
 func (s *Server) Router() http.Handler {
 	mux := http.NewServeMux()
@@ -64,6 +73,24 @@ func (s *Server) Router() http.Handler {
 	// Manifest endpoints
 	mux.HandleFunc("/api/v1/manifests/", s.handleManifests)
 	mux.HandleFunc("/api/v1/manifests/mismatches", s.handleMismatches)
+
+	// WebSocket endpoint for real-time event subscriptions
+	if s.wsHandler != nil {
+		mux.HandleFunc("/ws", s.wsHandler.HandleConnect)
+		mux.HandleFunc("/api/v1/ws", s.wsHandler.HandleConnect)
+	}
+
+	// Profiling endpoints (pprof) for performance analysis
+	mux.HandleFunc("/debug/pprof/", pprof.Index)
+	mux.HandleFunc("/debug/pprof/cmdline", pprof.Cmdline)
+	mux.HandleFunc("/debug/pprof/profile", pprof.Profile)
+	mux.HandleFunc("/debug/pprof/symbol", pprof.Symbol)
+	mux.HandleFunc("/debug/pprof/trace", pprof.Trace)
+	mux.Handle("/debug/pprof/heap", pprof.Handler("heap"))
+	mux.Handle("/debug/pprof/goroutine", pprof.Handler("goroutine"))
+	mux.Handle("/debug/pprof/block", pprof.Handler("block"))
+	mux.Handle("/debug/pprof/mutex", pprof.Handler("mutex"))
+	mux.Handle("/debug/pprof/allocs", pprof.Handler("allocs"))
 
 	// Wrap with logging middleware
 	return s.loggingMiddleware(mux)
@@ -648,4 +675,23 @@ func protoChainFromName(name string) protov1.Chain {
 	default:
 		return protov1.Chain_CHAIN_UNSPECIFIED
 	}
+}
+
+// HandleNATSEvent routes a canonical event received from NATS to connected WebSocket clients.
+// This is called by the NATS consumer when events are received from JetStream.
+func (s *Server) HandleNATSEvent(event *protov1.CanonicalEvent) {
+	if s.wsHandler == nil {
+		return
+	}
+
+	// Log event receipt for debugging/monitoring
+	s.logger.Debug("received NATS event",
+		"event_id", event.EventId,
+		"chain", chainNameFromProto(event.Chain),
+		"event_type", event.EventType,
+		"block_number", event.BlockNumber,
+	)
+
+	// Route the event to subscribed WebSocket clients
+	s.wsHandler.RouteEvent(event)
 }

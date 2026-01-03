@@ -27,6 +27,10 @@ func main() {
 		pollInterval = flag.Duration("poll-interval", 100*time.Millisecond, "Polling interval for new messages")
 		batchSize    = flag.Int("batch-size", 100, "Maximum messages to fetch per poll")
 		workers      = flag.Int("workers", 1, "Number of publisher workers (1 for strict ordering)")
+
+		// NATS JetStream configuration for WebSocket fanout
+		natsEnabled = flag.Bool("nats-enabled", envOrDefaultBool("NATS_ENABLED", true), "Enable NATS JetStream fanout")
+		natsURL     = flag.String("nats-url", envOrDefault("NATS_URL", "nats://localhost:4222"), "NATS server URL")
 	)
 	flag.Parse()
 
@@ -41,6 +45,8 @@ func main() {
 		"poll_interval", *pollInterval,
 		"batch_size", *batchSize,
 		"workers", *workers,
+		"nats_enabled", *natsEnabled,
+		"nats_url", *natsURL,
 	)
 
 	// Create database connection
@@ -66,11 +72,13 @@ func main() {
 	slog.Info("Connected to database", "host", *dbHost, "database", *dbName)
 
 	// Create publisher
-	publisher, err := NewPublisher(PublisherConfig{
+	publisher, err := NewPublisher(ctx, PublisherConfig{
 		Brokers:      *brokers,
 		PollInterval: *pollInterval,
 		BatchSize:    *batchSize,
 		Workers:      *workers,
+		NATSEnabled:  *natsEnabled,
+		NATSUrl:      *natsURL,
 	}, db)
 	if err != nil {
 		slog.Error("Failed to create publisher", "error", err)
@@ -128,4 +136,11 @@ func parseIntHelper(s string, result *int) (int, error) {
 	}
 	*result = n
 	return n, nil
+}
+
+func envOrDefaultBool(key string, defaultVal bool) bool {
+	if val := os.Getenv(key); val != "" {
+		return val == "true" || val == "1" || val == "yes"
+	}
+	return defaultVal
 }

@@ -73,6 +73,14 @@ type BrokerConfig struct {
 	// Producer settings
 	BatchSize    int           `yaml:"batch_size"`
 	BatchTimeout time.Duration `yaml:"batch_timeout"`
+
+	// Partition configuration
+	// PartitionCount is the number of partitions for the topic (0 = use broker default)
+	PartitionCount int `yaml:"partition_count"`
+	// PartitionKeyStrategy controls how events are distributed across partitions.
+	// Options: "chain_block" (default - chain:blockNumber), "account" (by first account),
+	// "event_type" (by event type), "round_robin" (no key, round-robin distribution)
+	PartitionKeyStrategy string `yaml:"partition_key_strategy"`
 }
 
 // ProcessingConfig holds event processing settings.

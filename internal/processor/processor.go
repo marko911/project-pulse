@@ -48,15 +48,29 @@ type Config struct {
 
 	// OutputTopic is the topic to publish canonical events to.
 	OutputTopic string
+
+	// ConsumerGroup is the Kafka consumer group name for coordinated consumption.
+	ConsumerGroup string
+
+	// PartitionCount is the number of partitions for output topics (0 = use broker default).
+	PartitionCount int
+
+	// PartitionKeyStrategy controls how events are distributed across partitions.
+	// Options: "chain_block" (default - chain:blockNumber), "account" (by first account),
+	// "event_type" (by event type), "round_robin" (no key, round-robin distribution)
+	PartitionKeyStrategy string
 }
 
 // DefaultConfig returns sensible default configuration.
 func DefaultConfig() Config {
 	return Config{
-		WorkerCount:    4,
-		BufferSize:     10000,
-		BrokerEndpoint: "localhost:9092",
-		InputTopic:     "raw-events",
-		OutputTopic:    "canonical-events",
+		WorkerCount:          4,
+		BufferSize:           10000,
+		BrokerEndpoint:       "localhost:9092",
+		InputTopic:           "raw-events",
+		OutputTopic:          "canonical-events",
+		ConsumerGroup:        "processor",
+		PartitionCount:       0, // Use broker default
+		PartitionKeyStrategy: "chain_block",
 	}
 }

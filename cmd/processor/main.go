@@ -23,6 +23,9 @@ func main() {
 	inputTopic := flag.String("input-topic", getEnv("INPUT_TOPIC", "raw-events"), "Topic to consume raw events from")
 	outputTopic := flag.String("output-topic", getEnv("OUTPUT_TOPIC", "canonical-events"), "Topic to publish canonical events to")
 	workers := flag.Int("workers", getEnvInt("WORKER_COUNT", 4), "Number of processing workers")
+	consumerGroup := flag.String("consumer-group", getEnv("CONSUMER_GROUP", "processor"), "Kafka consumer group name")
+	partitionCount := flag.Int("partition-count", getEnvInt("PARTITION_COUNT", 0), "Number of partitions for output topics (0 = broker default)")
+	partitionKeyStrategy := flag.String("partition-key-strategy", getEnv("PARTITION_KEY_STRATEGY", "chain_block"), "Partition key strategy: chain_block, account, event_type, round_robin")
 	logLevel := flag.String("log-level", getEnv("LOG_LEVEL", "info"), "Log level: debug, info, warn, error")
 	flag.Parse()
 
@@ -49,15 +52,21 @@ func main() {
 		"input_topic", *inputTopic,
 		"output_topic", *outputTopic,
 		"workers", *workers,
+		"consumer_group", *consumerGroup,
+		"partition_count", *partitionCount,
+		"partition_key_strategy", *partitionKeyStrategy,
 	)
 
 	// Create processor configuration
 	cfg := processor.Config{
-		WorkerCount:    *workers,
-		BufferSize:     10000,
-		BrokerEndpoint: *brokerEndpoint,
-		InputTopic:     *inputTopic,
-		OutputTopic:    *outputTopic,
+		WorkerCount:          *workers,
+		BufferSize:           10000,
+		BrokerEndpoint:       *brokerEndpoint,
+		InputTopic:           *inputTopic,
+		OutputTopic:          *outputTopic,
+		ConsumerGroup:        *consumerGroup,
+		PartitionCount:       *partitionCount,
+		PartitionKeyStrategy: *partitionKeyStrategy,
 	}
 
 	_ = cfg // TODO: Use config to create processor instance

@@ -10,6 +10,7 @@ import (
 
 	"github.com/twmb/franz-go/pkg/kgo"
 
+	pnats "github.com/mirador/pulse/internal/platform/nats"
 	"github.com/mirador/pulse/internal/platform/storage"
 )
 
@@ -19,6 +20,9 @@ type PublisherConfig struct {
 	PollInterval time.Duration
 	BatchSize    int
 	Workers      int
+	// NATS configuration for WebSocket fanout
+	NATSUrl     string
+	NATSEnabled bool
 }
 
 // Publisher polls the outbox table and publishes messages to Kafka/Redpanda.
@@ -27,10 +31,12 @@ type Publisher struct {
 	db     *storage.DB
 	repo   *storage.OutboxRepository
 	client *kgo.Client
+	// NATS client for WebSocket fanout (optional)
+	nats *pnats.Client
 }
 
 // NewPublisher creates a new Publisher instance.
-func NewPublisher(cfg PublisherConfig, db *storage.DB) (*Publisher, error) {
+func NewPublisher(ctx context.Context, cfg PublisherConfig, db *storage.DB) (*Publisher, error) {
 	// Parse brokers
 	brokerList := strings.Split(cfg.Brokers, ",")
 	for i := range brokerList {
@@ -56,12 +62,38 @@ func NewPublisher(cfg PublisherConfig, db *storage.DB) (*Publisher, error) {
 		return nil, fmt.Errorf("create kafka client: %w", err)
 	}
 
-	return &Publisher{
+	p := &Publisher{
 		cfg:    cfg,
 		db:     db,
 		repo:   storage.NewOutboxRepository(db),
 		client: client,
-	}, nil
+	}
+
+	// Initialize NATS if enabled
+	if cfg.NATSEnabled && cfg.NATSUrl != "" {
+		natsCfg := pnats.DefaultConfig()
+		natsCfg.URL = cfg.NATSUrl
+		natsCfg.Name = "outbox-publisher"
+
+		natsClient, err := pnats.Connect(ctx, natsCfg)
+		if err != nil {
+			client.Close()
+			return nil, fmt.Errorf("nats connect: %w", err)
+		}
+		p.nats = natsClient
+
+		// Ensure the canonical events stream exists
+		streamCfg := pnats.DefaultCanonicalEventsStreamConfig()
+		if _, err := pnats.EnsureStream(ctx, natsClient.JetStream(), streamCfg); err != nil {
+			client.Close()
+			natsClient.Close()
+			return nil, fmt.Errorf("ensure nats stream: %w", err)
+		}
+
+		slog.Info("NATS JetStream initialized", "url", cfg.NATSUrl, "stream", streamCfg.Name)
+	}
+
+	return p, nil
 }
 
 // Run starts the publisher polling loop.
@@ -182,7 +214,7 @@ type publishResult struct {
 	err error
 }
 
-// publishMessage publishes a single message to Kafka.
+// publishMessage publishes a single message to Kafka and optionally to NATS.
 func (p *Publisher) publishMessage(ctx context.Context, msg storage.OutboxMessage) error {
 	record := &kgo.Record{
 		Topic: msg.Topic,
@@ -198,21 +230,79 @@ func (p *Publisher) publishMessage(ctx context.Context, msg storage.OutboxMessag
 	// Produce synchronously to maintain ordering within a partition
 	results := p.client.ProduceSync(ctx, record)
 	if err := results.FirstErr(); err != nil {
-		return fmt.Errorf("produce: %w", err)
+		return fmt.Errorf("kafka produce: %w", err)
+	}
+
+	// Publish to NATS for WebSocket fanout (if enabled)
+	if p.nats != nil {
+		if err := p.publishToNATS(ctx, msg); err != nil {
+			// Log but don't fail - Kafka is the primary store
+			slog.Warn("NATS publish failed",
+				"event_id", msg.EventID,
+				"error", err,
+			)
+		}
 	}
 
 	return nil
+}
+
+// publishToNATS publishes a message to NATS JetStream for WebSocket fanout.
+func (p *Publisher) publishToNATS(ctx context.Context, msg storage.OutboxMessage) error {
+	// Build the NATS subject: events.canonical.<chain>.<event_type>
+	chainName := chainIDToName(msg.Chain)
+	subject := pnats.SubjectForEvent(chainName, msg.EventType)
+
+	// Publish to JetStream
+	_, err := p.nats.JetStream().Publish(ctx, subject, msg.Payload)
+	if err != nil {
+		return fmt.Errorf("jetstream publish: %w", err)
+	}
+
+	return nil
+}
+
+// chainIDToName converts chain ID to a lowercase string name for NATS subjects.
+func chainIDToName(chainID int16) string {
+	switch chainID {
+	case 1:
+		return "solana"
+	case 2:
+		return "ethereum"
+	case 3:
+		return "polygon"
+	case 4:
+		return "arbitrum"
+	case 5:
+		return "optimism"
+	case 6:
+		return "base"
+	case 7:
+		return "avalanche"
+	case 8:
+		return "bsc"
+	default:
+		return fmt.Sprintf("chain-%d", chainID)
+	}
 }
 
 // shutdown gracefully shuts down the publisher.
 func (p *Publisher) shutdown() error {
 	slog.Info("Shutting down publisher")
 
-	// Flush any pending messages
+	// Flush any pending Kafka messages
 	if err := p.client.Flush(context.Background()); err != nil {
-		slog.Error("Error flushing messages", "error", err)
+		slog.Error("Error flushing Kafka messages", "error", err)
 	}
 
 	p.client.Close()
+
+	// Close NATS connection
+	if p.nats != nil {
+		if err := p.nats.Close(); err != nil {
+			slog.Error("Error closing NATS connection", "error", err)
+		}
+	}
+
 	return nil
 }

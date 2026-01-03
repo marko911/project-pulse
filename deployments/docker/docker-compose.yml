@@ -60,6 +60,26 @@ services:
       timeout: 5s
       retries: 5
 
+  # NATS JetStream - Distributed fanout for WebSocket delivery
+  nats:
+    image: nats:2.10-alpine
+    container_name: pulse-nats
+    command:
+      - --jetstream
+      - --store_dir=/data
+      - --http_port=8222
+    ports:
+      - "4222:4222"   # Client connections
+      - "8222:8222"   # HTTP monitoring
+      - "6222:6222"   # Cluster routing (for future multi-node)
+    volumes:
+      - nats-data:/data
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8222/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   # Redis - Caching and ephemeral state
   redis:
     image: redis:7-alpine
@@ -75,7 +95,60 @@ services:
       timeout: 5s
       retries: 5
 
+  # Prometheus - Metrics collection and storage
+  prometheus:
+    image: prom/prometheus:v2.48.0
+    container_name: pulse-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - prometheus-data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=15d'
+      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+      - '--web.console.templates=/usr/share/prometheus/consoles'
+      - '--web.enable-lifecycle'
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:9090/-/healthy"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Grafana - Visualization and dashboards
+  grafana:
+    image: grafana/grafana:10.2.2
+    container_name: pulse-grafana
+    depends_on:
+      prometheus:
+        condition: service_healthy
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: pulse_dev
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_INSTALL_PLUGINS: grafana-clock-panel,grafana-simple-json-datasource
+    volumes:
+      - ./grafana/provisioning/datasources:/etc/grafana/provisioning/datasources:ro
+      - ./grafana/provisioning/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:3000/api/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
 volumes:
   redpanda-data:
   timescaledb-data:
   redis-data:
+  nats-data:
+  prometheus-data:
+  grafana-data:

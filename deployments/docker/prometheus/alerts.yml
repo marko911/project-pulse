@@ -1,0 +1,202 @@
+groups:
+  - name: pulse_slo_alerts
+    rules:
+      # P99 Latency Alerts
+      - alert: HighEventProcessingLatency
+        expr: histogram_quantile(0.99, rate(pulse_event_latency_seconds_bucket[5m])) > 0.5
+        for: 2m
+        labels:
+          severity: warning
+          service: pulse
+        annotations:
+          summary: "High p99 event processing latency"
+          description: "p99 latency is {{ $value | humanizeDuration }} (threshold: 500ms)"
+          runbook_url: "https://docs.pulse.dev/runbooks/high-latency"
+
+      - alert: CriticalEventProcessingLatency
+        expr: histogram_quantile(0.99, rate(pulse_event_latency_seconds_bucket[5m])) > 1.0
+        for: 1m
+        labels:
+          severity: critical
+          service: pulse
+        annotations:
+          summary: "Critical p99 event processing latency"
+          description: "p99 latency is {{ $value | humanizeDuration }} (threshold: 1s) - SLO breach imminent"
+          runbook_url: "https://docs.pulse.dev/runbooks/high-latency"
+
+      # Error Rate Alerts
+      - alert: HighErrorRate
+        expr: |
+          (
+            rate(pulse_events_errors_total[5m])
+            / rate(pulse_events_processed_total[5m])
+          ) > 0.01
+        for: 2m
+        labels:
+          severity: warning
+          service: pulse
+        annotations:
+          summary: "High event processing error rate"
+          description: "Error rate is {{ $value | humanizePercentage }} (threshold: 1%)"
+          runbook_url: "https://docs.pulse.dev/runbooks/high-error-rate"
+
+      - alert: CriticalErrorRate
+        expr: |
+          (
+            rate(pulse_events_errors_total[5m])
+            / rate(pulse_events_processed_total[5m])
+          ) > 0.05
+        for: 1m
+        labels:
+          severity: critical
+          service: pulse
+        annotations:
+          summary: "Critical event processing error rate"
+          description: "Error rate is {{ $value | humanizePercentage }} (threshold: 5%) - SLO breach"
+          runbook_url: "https://docs.pulse.dev/runbooks/high-error-rate"
+
+      # Throughput Alerts
+      - alert: LowEventThroughput
+        expr: rate(pulse_events_processed_total[5m]) < 10
+        for: 5m
+        labels:
+          severity: warning
+          service: pulse
+        annotations:
+          summary: "Low event throughput"
+          description: "Throughput is {{ $value | humanize }}/s (expected: >10/s) - possible upstream issue"
+          runbook_url: "https://docs.pulse.dev/runbooks/low-throughput"
+
+      - alert: ZeroEventThroughput
+        expr: rate(pulse_events_processed_total[5m]) == 0
+        for: 2m
+        labels:
+          severity: critical
+          service: pulse
+        annotations:
+          summary: "Zero event throughput"
+          description: "No events processed in the last 5 minutes - pipeline may be stalled"
+          runbook_url: "https://docs.pulse.dev/runbooks/zero-throughput"
+
+  - name: pulse_infrastructure_alerts
+    rules:
+      # Kafka/Redpanda Alerts
+      - alert: HighConsumerLag
+        expr: |
+          sum by (group) (
+            redpanda_kafka_consumer_group_committed_offset
+            - redpanda_kafka_consumer_group_log_end_offset
+          ) < -1000
+        for: 3m
+        labels:
+          severity: warning
+          service: redpanda
+        annotations:
+          summary: "High Kafka consumer lag"
+          description: "Consumer group {{ $labels.group }} is {{ $value | humanize }} messages behind"
+          runbook_url: "https://docs.pulse.dev/runbooks/consumer-lag"
+
+      - alert: CriticalConsumerLag
+        expr: |
+          sum by (group) (
+            redpanda_kafka_consumer_group_committed_offset
+            - redpanda_kafka_consumer_group_log_end_offset
+          ) < -10000
+        for: 2m
+        labels:
+          severity: critical
+          service: redpanda
+        annotations:
+          summary: "Critical Kafka consumer lag"
+          description: "Consumer group {{ $labels.group }} is {{ $value | humanize }} messages behind - backlog building"
+          runbook_url: "https://docs.pulse.dev/runbooks/consumer-lag"
+
+      # WebSocket Alerts
+      - alert: WebSocketConnectionSpike
+        expr: |
+          pulse_websocket_connections_active
+          > (avg_over_time(pulse_websocket_connections_active[1h]) * 2)
+        for: 5m
+        labels:
+          severity: warning
+          service: api-gateway
+        annotations:
+          summary: "WebSocket connection spike"
+          description: "Active connections ({{ $value }}) are 2x above 1h average"
+          runbook_url: "https://docs.pulse.dev/runbooks/ws-spike"
+
+      - alert: WebSocketConnectionsDrop
+        expr: |
+          pulse_websocket_connections_active
+          < (avg_over_time(pulse_websocket_connections_active[1h]) * 0.5)
+        for: 5m
+        labels:
+          severity: warning
+          service: api-gateway
+        annotations:
+          summary: "WebSocket connections dropped"
+          description: "Active connections ({{ $value }}) are 50% below 1h average - possible client issue"
+          runbook_url: "https://docs.pulse.dev/runbooks/ws-drop"
+
+  - name: pulse_reconciler_alerts
+    rules:
+      # Reconciler Alerts
+      - alert: ReconcilerHalted
+        expr: pulse_reconciler_halted == 1
+        for: 0m
+        labels:
+          severity: critical
+          service: reconciler
+        annotations:
+          summary: "Reconciler HALTED - Fail-closed triggered"
+          description: "The reconciler has halted due to a data integrity mismatch. Immediate investigation required."
+          runbook_url: "https://docs.pulse.dev/runbooks/reconciler-halt"
+
+      - alert: ReconcilerMismatches
+        expr: increase(pulse_reconciler_blocks_mismatched_total[1h]) > 0
+        for: 0m
+        labels:
+          severity: warning
+          service: reconciler
+        annotations:
+          summary: "Reconciler detected mismatches"
+          description: "{{ $value }} blocks had mismatches in the last hour"
+          runbook_url: "https://docs.pulse.dev/runbooks/reconciler-mismatch"
+
+      - alert: ReconcilerGoldenSourceErrors
+        expr: rate(pulse_reconciler_golden_source_errors_total[15m]) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+          service: reconciler
+        annotations:
+          summary: "Golden source verification errors"
+          description: "Golden source client returning errors - verification compromised"
+          runbook_url: "https://docs.pulse.dev/runbooks/golden-source-error"
+
+  - name: pulse_nats_alerts
+    rules:
+      # NATS JetStream Alerts
+      - alert: NATSHighRedeliveryRate
+        expr: |
+          rate(pulse_nats_consumer_redelivered_total[5m])
+          / rate(pulse_nats_messages_delivered_total[5m]) > 0.1
+        for: 3m
+        labels:
+          severity: warning
+          service: nats
+        annotations:
+          summary: "High NATS message redelivery rate"
+          description: "Redelivery rate is {{ $value | humanizePercentage }} - consumers may be failing"
+          runbook_url: "https://docs.pulse.dev/runbooks/nats-redelivery"
+
+      - alert: NATSConsumerPending
+        expr: pulse_nats_consumer_pending > 10000
+        for: 2m
+        labels:
+          severity: warning
+          service: nats
+        annotations:
+          summary: "High NATS pending messages"
+          description: "{{ $value | humanize }} messages pending - consumers not keeping up"
+          runbook_url: "https://docs.pulse.dev/runbooks/nats-pending"

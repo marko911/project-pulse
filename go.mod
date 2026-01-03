@@ -5,7 +5,9 @@ go 1.24.4
 require (
 	github.com/ethereum/go-ethereum v1.16.7
 	github.com/gagliardetto/solana-go v1.14.0
+	github.com/google/uuid v1.6.0
 	github.com/jackc/pgx/v5 v5.8.0
+	github.com/nats-io/nats.go v1.48.0
 	github.com/redis/go-redis/v9 v9.17.2
 	github.com/twmb/franz-go v1.20.6
 	google.golang.org/grpc v1.78.0
@@ -34,7 +36,6 @@ require (
 	github.com/gagliardetto/binary v0.8.0 // indirect
 	github.com/gagliardetto/treeout v0.1.4 // indirect
 	github.com/go-ole/go-ole v1.3.0 // indirect
-	github.com/google/uuid v1.6.0 // indirect
 	github.com/gorilla/websocket v1.4.2 // indirect
 	github.com/holiman/uint256 v1.3.2 // indirect
 	github.com/jackc/pgpassfile v1.0.0 // indirect
@@ -50,6 +51,8 @@ require (
 	github.com/modern-go/reflect2 v1.0.2 // indirect
 	github.com/mostynb/zstdpool-freelist v0.0.0-20201229113212-927304c0c3b1 // indirect
 	github.com/mr-tron/base58 v1.2.0 // indirect
+	github.com/nats-io/nkeys v0.4.11 // indirect
+	github.com/nats-io/nuid v1.0.1 // indirect
 	github.com/pierrec/lz4/v4 v4.1.22 // indirect
 	github.com/shirou/gopsutil v3.21.4-0.20210419000835-c7a38de76ee5+incompatible // indirect
 	github.com/streamingfast/logging v0.0.0-20230608130331-f22c91403091 // indirect

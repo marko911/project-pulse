@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/redis/go-redis/v9"
@@ -398,17 +399,106 @@ func (m *RedisManager) Match(ctx context.Context, event *protov1.CanonicalEvent)
 	return results, nil
 }
 
-// MatchBatch finds matching subscriptions for multiple events.
-func (m *RedisManager) MatchBatch(ctx context.Context, events []*protov1.CanonicalEvent) (map[string][]MatchResult, error) {
-	results := make(map[string][]MatchResult, len(events))
+// FindMatchingSubscribers returns unique client IDs that have subscriptions matching the event.
+// This is a convenience method for routing events to WebSocket clients.
+func (m *RedisManager) FindMatchingSubscribers(ctx context.Context, event *protov1.CanonicalEvent) ([]string, error) {
+	matches, err := m.Match(ctx, event)
+	if err != nil {
+		return nil, err
+	}
 
-	// For now, iterate over events. Can be optimized with parallel matching.
-	for _, event := range events {
-		matches, err := m.Match(ctx, event)
-		if err != nil {
-			return nil, fmt.Errorf("match event %s: %w", event.EventId, err)
+	if len(matches) == 0 {
+		return nil, nil
+	}
+
+	// Extract unique client IDs
+	seen := make(map[string]bool, len(matches))
+	clientIDs := make([]string, 0, len(matches))
+	for _, match := range matches {
+		if !seen[match.ClientID] {
+			seen[match.ClientID] = true
+			clientIDs = append(clientIDs, match.ClientID)
 		}
-		results[event.EventId] = matches
+	}
+
+	return clientIDs, nil
+}
+
+// MatchBatch finds matching subscriptions for multiple events using parallel matching.
+func (m *RedisManager) MatchBatch(ctx context.Context, events []*protov1.CanonicalEvent) (map[string][]MatchResult, error) {
+	if len(events) == 0 {
+		return make(map[string][]MatchResult), nil
+	}
+
+	// For single events, skip parallelization overhead
+	if len(events) == 1 {
+		matches, err := m.Match(ctx, events[0])
+		if err != nil {
+			return nil, fmt.Errorf("match event %s: %w", events[0].EventId, err)
+		}
+		return map[string][]MatchResult{events[0].EventId: matches}, nil
+	}
+
+	// Parallel matching with bounded concurrency
+	const maxWorkers = 8
+	numWorkers := len(events)
+	if numWorkers > maxWorkers {
+		numWorkers = maxWorkers
+	}
+
+	type matchJob struct {
+		event *protov1.CanonicalEvent
+	}
+	type matchResult struct {
+		eventID string
+		matches []MatchResult
+		err     error
+	}
+
+	jobs := make(chan matchJob, len(events))
+	resultsCh := make(chan matchResult, len(events))
+
+	// Start workers
+	var wg sync.WaitGroup
+	for i := 0; i < numWorkers; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for job := range jobs {
+				matches, err := m.Match(ctx, job.event)
+				resultsCh <- matchResult{
+					eventID: job.event.EventId,
+					matches: matches,
+					err:     err,
+				}
+			}
+		}()
+	}
+
+	// Send jobs
+	for _, event := range events {
+		jobs <- matchJob{event: event}
+	}
+	close(jobs)
+
+	// Wait for workers and close results channel
+	go func() {
+		wg.Wait()
+		close(resultsCh)
+	}()
+
+	// Collect results
+	results := make(map[string][]MatchResult, len(events))
+	var firstErr error
+	for res := range resultsCh {
+		if res.err != nil && firstErr == nil {
+			firstErr = fmt.Errorf("match event %s: %w", res.eventID, res.err)
+		}
+		results[res.eventID] = res.matches
+	}
+
+	if firstErr != nil {
+		return nil, firstErr
 	}
 
 	return results, nil
