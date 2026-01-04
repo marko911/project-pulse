@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/signal"
 	"strconv"
+	"strings"
 	"syscall"
 	"time"
 
@@ -30,7 +31,12 @@ func main() {
 	flag.StringVar(&cfg.RedisAddr, "redis-addr", envOrDefault("REDIS_ADDR", "localhost:6379"), "Redis server address")
 	flag.StringVar(&cfg.RedisPassword, "redis-password", envOrDefault("REDIS_PASSWORD", ""), "Redis password")
 	flag.IntVar(&cfg.RedisDB, "redis-db", envOrDefaultInt("REDIS_DB", 0), "Redis database number")
+	// WebSocket security
+	wsOrigins := flag.String("ws-allowed-origins", envOrDefault("WS_ALLOWED_ORIGINS", "*"), "Comma-separated list of allowed WebSocket origins, or '*' for all")
 	flag.Parse()
+
+	// Parse allowed origins
+	cfg.AllowedOrigins = parseOrigins(*wsOrigins)
 
 	// Override with environment variables if set
 	if v := os.Getenv("API_LISTEN_ADDR"); v != "" {
@@ -64,6 +70,8 @@ type Config struct {
 	RedisAddr     string
 	RedisPassword string
 	RedisDB       int
+	// WebSocket security configuration
+	AllowedOrigins []string
 }
 
 func run(cfg Config, logger *slog.Logger) error {
@@ -84,11 +92,12 @@ func run(cfg Config, logger *slog.Logger) error {
 	if err != nil {
 		logger.Warn("Redis subscription manager initialization failed, WebSocket subscriptions disabled", "error", err)
 	} else {
-		// Create WebSocket handler with subscription manager
-		wsHandler := NewWebSocketHandler(subManager, logger)
+		// Create WebSocket handler with subscription manager and allowed origins
+		wsHandler := NewWebSocketHandler(subManager, cfg.AllowedOrigins, logger)
 		server.SetWebSocketHandler(wsHandler)
 		logger.Info("WebSocket subscription system initialized",
 			"redis_addr", cfg.RedisAddr,
+			"allowed_origins", cfg.AllowedOrigins,
 		)
 	}
 
@@ -199,4 +208,23 @@ func uniqueConsumerName() string {
 		return fmt.Sprintf("api-gateway-%d", time.Now().UnixNano())
 	}
 	return fmt.Sprintf("api-gateway-%s", hostname)
+}
+
+// parseOrigins parses a comma-separated list of allowed origins.
+// Returns nil if "*" is specified (allow all origins).
+func parseOrigins(origins string) []string {
+	origins = strings.TrimSpace(origins)
+	if origins == "" || origins == "*" {
+		return nil // nil means allow all origins
+	}
+
+	parts := strings.Split(origins, ",")
+	result := make([]string, 0, len(parts))
+	for _, p := range parts {
+		p = strings.TrimSpace(p)
+		if p != "" {
+			result = append(result, p)
+		}
+	}
+	return result
 }

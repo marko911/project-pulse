@@ -12,9 +12,9 @@ services:
       - --overprovisioned
       - --node-id=0
       - --kafka-addr=PLAINTEXT://0.0.0.0:9092
-      - --advertise-kafka-addr=PLAINTEXT://localhost:9092
+      - --advertise-kafka-addr=PLAINTEXT://redpanda:9092
       - --pandaproxy-addr=PLAINTEXT://0.0.0.0:8082
-      - --advertise-pandaproxy-addr=PLAINTEXT://localhost:8082
+      - --advertise-pandaproxy-addr=PLAINTEXT://redpanda:8082
     ports:
       - "9092:9092"   # Kafka API
       - "8081:8081"   # Schema Registry
@@ -28,6 +28,25 @@ services:
       timeout: 5s
       retries: 5
 
+  # Redpanda Init - Creates required Kafka topics on startup
+  redpanda-init:
+    image: redpandadata/redpanda:v24.2.1
+    container_name: pulse-redpanda-init
+    depends_on:
+      redpanda:
+        condition: service_healthy
+    entrypoint: /bin/bash
+    command: |
+      -c 'echo "Creating Kafka topics..." &&
+      rpk topic create canonical-events --brokers redpanda:9092 -p 4 -r 1 || true &&
+      rpk topic create function-invocations --brokers redpanda:9092 -p 4 -r 1 || true &&
+      rpk topic create function-results --brokers redpanda:9092 -p 4 -r 1 || true &&
+      rpk topic create billing-events --brokers redpanda:9092 -p 4 -r 1 || true &&
+      rpk topic create raw-events --brokers redpanda:9092 -p 4 -r 1 || true &&
+      echo "Topics created successfully" &&
+      rpk topic list --brokers redpanda:9092'
+    restart: "no"
+
   # Redpanda Console - Web UI for Redpanda
   redpanda-console:
     image: redpandadata/console:v2.7.0
@@ -35,6 +54,8 @@ services:
     depends_on:
       redpanda:
         condition: service_healthy
+      redpanda-init:
+        condition: service_completed_successfully
     ports:
       - "18080:8080"  # Using 18080 to avoid conflict with local 8080
     environment:
@@ -120,6 +141,167 @@ services:
       timeout: 5s
       retries: 5
 
+  # MinIO - S3-compatible object storage for WASM modules
+  minio:
+    image: minio/minio:latest
+    container_name: pulse-minio
+    command: server /data --console-address ":9001"
+    ports:
+      - "9000:9000"   # S3 API
+      - "9001:9001"   # Console
+    environment:
+      MINIO_ROOT_USER: pulse
+      MINIO_ROOT_PASSWORD: pulse_dev_123
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Solana Adapter
+  adapter-solana:
+    build:
+      context: ../..
+      dockerfile: cmd/adapter-solana/Dockerfile
+    container_name: pulse-adapter-solana
+    depends_on:
+      redpanda-init:
+        condition: service_completed_successfully
+    environment:
+      SOLANA_ADAPTER_TYPE: ${SOLANA_ADAPTER_TYPE:-ws}
+      GEYSER_ENDPOINT: ${GEYSER_ENDPOINT:-http://localhost:10000}
+      GEYSER_TOKEN: ${GEYSER_TOKEN:-}
+      SOLANA_WS_ENDPOINT: ${SOLANA_WS_ENDPOINT:-wss://api.devnet.solana.com}
+      COMMITMENT_LEVEL: ${COMMITMENT_LEVEL:-confirmed}
+      BROKER_ENDPOINT: redpanda:9092
+      OUTPUT_TOPIC: canonical-events
+      LOG_LEVEL: debug
+    restart: unless-stopped
+
+  # EVM Adapter
+  adapter-evm:
+    build:
+      context: ../..
+      dockerfile: cmd/adapter-evm/Dockerfile
+    container_name: pulse-adapter-evm
+    depends_on:
+      redpanda-init:
+        condition: service_completed_successfully
+    environment:
+      EVM_RPC_URL: ${EVM_RPC_URL:-}
+      CHAIN_ID: 1
+      START_BLOCK: 0
+      BROKER_ENDPOINT: redpanda:9092
+      OUTPUT_TOPIC: raw-events
+      LOG_LEVEL: info
+    restart: unless-stopped
+
+  # Processor - Core event processing
+  processor:
+    build:
+      context: ../..
+      dockerfile: cmd/processor/Dockerfile
+    container_name: pulse-processor
+    depends_on:
+      redpanda-init:
+        condition: service_completed_successfully
+    environment:
+      BROKER_ENDPOINT: redpanda:9092
+      INPUT_TOPIC: raw-events
+      OUTPUT_TOPIC: canonical-events
+      CONSUMER_GROUP: processor
+      WORKER_COUNT: 4
+      PARTITION_COUNT: 4
+      LOG_LEVEL: info
+    restart: unless-stopped
+
+  # Function API - WASM function management API
+  function-api:
+    build:
+      context: ../..
+      dockerfile: cmd/function-api/Dockerfile
+    container_name: pulse-function-api
+    depends_on:
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    ports:
+      - "8090:8090"
+    environment:
+      MINIO_ENDPOINT: minio:9000
+      MINIO_ACCESS_KEY: pulse
+      MINIO_SECRET_KEY: pulse_dev_123
+      MINIO_BUCKET: wasm-modules
+      MINIO_USE_SSL: "false"
+      REDIS_ADDR: redis:6379
+      DB_HOST: timescaledb
+      DB_PORT: 5432
+      DB_USER: pulse
+      DB_PASSWORD: pulse_dev
+      DB_NAME: pulse
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8090/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Trigger Router - Routes canonical events to function invocations
+  trigger-router:
+    build:
+      context: ../..
+      dockerfile: cmd/trigger-router/Dockerfile
+    container_name: pulse-trigger-router
+    depends_on:
+      redpanda-init:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    environment:
+      KAFKA_BROKERS: redpanda:9092
+      INPUT_TOPIC: canonical-events
+      OUTPUT_TOPIC: function-invocations
+      CONSUMER_GROUP: trigger-router
+      REDIS_ADDR: redis:6379
+      REDIS_PREFIX: "triggers:"
+      WORKER_COUNT: 4
+      LOG_LEVEL: info
+    restart: unless-stopped
+
+  # WASM Host - Function execution runtime
+  wasm-host:
+    build:
+      context: ../..
+      dockerfile: cmd/wasm-host/Dockerfile
+    container_name: pulse-wasm-host
+    depends_on:
+      redpanda-init:
+        condition: service_completed_successfully
+      minio:
+        condition: service_healthy
+    ports:
+      - "9091:9091"   # Metrics/health
+    environment:
+      BROKER_ENDPOINT: redpanda:9092
+      INVOCATION_TOPIC: function-invocations
+      CONSUMER_GROUP: wasm-host
+      S3_ENDPOINT: minio:9000
+      S3_BUCKET: wasm-modules
+      S3_ACCESS_KEY: pulse
+      S3_SECRET_KEY: pulse_dev_123
+      S3_USE_SSL: "false"
+      MAX_MEMORY_MB: 128
+      MAX_EXECUTION_MS: 5000
+      MAX_CONCURRENT_EXEC: 100
+      WORKER_COUNT: 4
+      LOG_LEVEL: debug
+      REDIS_ADDR: redis:6379
+    volumes:
+      - wasm-cache:/tmp/wasm-cache
+
   # Grafana - Visualization and dashboards
   grafana:
     image: grafana/grafana:10.2.2
@@ -152,3 +334,5 @@ volumes:
   nats-data:
   prometheus-data:
   grafana-data:
+  minio-data:
+  wasm-cache:

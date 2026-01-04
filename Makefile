@@ -75,6 +75,10 @@ logs:
 dev: up
 	@echo "Development environment started"
 
+# Run migrations manually via a container
+migrate-up:
+	docker compose -f deployments/docker/docker-compose.yml exec manifest-builder /app/manifest-builder --db-host timescaledb
+
 # Clean build artifacts
 clean:
 	rm -rf $(BINDIR)

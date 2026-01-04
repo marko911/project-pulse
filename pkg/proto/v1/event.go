@@ -44,24 +44,24 @@ const (
 // CanonicalEvent is the normalized, cross-chain event representation.
 // This is a temporary Go struct - will be replaced by generated protobuf.
 type CanonicalEvent struct {
-	EventId          string
-	Chain            Chain
-	CommitmentLevel  CommitmentLevel
-	BlockNumber      uint64
-	BlockHash        string
-	TxHash           string
-	TxIndex          uint32
-	EventIndex       uint32
-	EventType        string
-	Accounts         []string
-	Timestamp        time.Time
-	Payload          []byte
-	ReorgAction      ReorgAction
-	SchemaVersion    uint32
-	IngestedAt       time.Time
-	ReplacesEventId  string
-	ProgramId        string
-	NativeValue      uint64
+	EventId          string          `json:"event_id"`
+	Chain            Chain           `json:"chain"`
+	CommitmentLevel  CommitmentLevel `json:"commitment_level"`
+	BlockNumber      uint64          `json:"block_number"`
+	BlockHash        string          `json:"block_hash"`
+	TxHash           string          `json:"tx_hash"`
+	TxIndex          uint32          `json:"tx_index"`
+	EventIndex       uint32          `json:"event_index"`
+	EventType        string          `json:"event_type"`
+	Accounts         []string        `json:"accounts"`
+	Timestamp        time.Time       `json:"timestamp"`
+	Payload          []byte          `json:"payload"`
+	ReorgAction      ReorgAction     `json:"reorg_action"`
+	SchemaVersion    uint32          `json:"schema_version"`
+	IngestedAt       time.Time       `json:"ingested_at"`
+	ReplacesEventId  string          `json:"replaces_event_id"`
+	ProgramId        string          `json:"program_id"`
+	NativeValue      uint64          `json:"native_value"`
 }
 
 // EventBatch is used for bulk transmission of events.

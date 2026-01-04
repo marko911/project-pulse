@@ -2,9 +2,11 @@ package evm
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"math/big"
+	"strings"
 	"sync"
 	"time"
 
@@ -12,6 +14,8 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethclient"
+	"github.com/twmb/franz-go/pkg/kgo"
+
 	"github.com/mirador/pulse/internal/adapter"
 )
 
@@ -24,6 +28,9 @@ type Adapter struct {
 	// RPC clients
 	client   *ethclient.Client
 	wsClient *ethclient.Client
+
+	// Broker producer
+	producer *kgo.Client
 
 	// Subscriptions
 	blockSub ethereum.Subscription
@@ -150,7 +157,7 @@ func (a *Adapter) connect(ctx context.Context) error {
 	return nil
 }
 
-// disconnect closes all RPC connections.
+// disconnect closes all RPC and broker connections.
 func (a *Adapter) disconnect() {
 	if a.blockSub != nil {
 		a.blockSub.Unsubscribe()
@@ -164,18 +171,42 @@ func (a *Adapter) disconnect() {
 	if a.client != nil {
 		a.client.Close()
 	}
-	a.logger.Info("disconnected from RPC")
+	if a.producer != nil {
+		a.producer.Flush(context.Background())
+		a.producer.Close()
+	}
+	a.logger.Info("disconnected from RPC and broker")
 }
 
-// connectBroker establishes connection to the message broker.
+// connectBroker establishes connection to the message broker using franz-go.
 func (a *Adapter) connectBroker(ctx context.Context) error {
 	a.logger.Info("connecting to message broker",
 		"addresses", a.cfg.Broker.Addresses,
 		"topic_prefix", a.cfg.Broker.TopicPrefix,
 	)
 
-	// TODO: Implement actual broker connection using franz-go or sarama
-	a.logger.Debug("broker connection placeholder - actual implementation pending")
+	// Normalize broker addresses
+	brokerList := make([]string, len(a.cfg.Broker.Addresses))
+	for i, addr := range a.cfg.Broker.Addresses {
+		brokerList[i] = strings.TrimSpace(addr)
+	}
+
+	// Create Kafka producer for raw-events topic
+	producer, err := kgo.NewClient(
+		kgo.SeedBrokers(brokerList...),
+		kgo.MaxProduceRequestsInflightPerBroker(1),
+		kgo.RequiredAcks(kgo.AllISRAcks()),
+		kgo.ProducerBatchCompression(kgo.SnappyCompression()),
+		kgo.RecordRetries(5),
+	)
+	if err != nil {
+		return fmt.Errorf("create kafka producer: %w", err)
+	}
+
+	a.producer = producer
+	a.logger.Info("connected to message broker",
+		"brokers", brokerList,
+	)
 	return nil
 }
 
@@ -273,6 +304,17 @@ func (a *Adapter) processBlock(ctx context.Context, header *types.Header) error 
 	// Process each log
 	for _, log := range logs {
 		event := a.logToEvent(header, &log)
+
+		// Publish event to broker
+		if err := a.publishEvent(ctx, event); err != nil {
+			a.logger.Error("failed to publish event",
+				"block", blockNum,
+				"tx", log.TxHash.Hex(),
+				"error", err,
+			)
+			continue
+		}
+
 		a.mu.Lock()
 		a.eventsEmitted++
 		a.mu.Unlock()
@@ -283,12 +325,64 @@ func (a *Adapter) processBlock(ctx context.Context, header *types.Header) error 
 			"address", log.Address.Hex(),
 			"topics", len(log.Topics),
 		)
-
-		// TODO: Send to events channel or broker
-		_ = event
 	}
 
 	return nil
+}
+
+// publishEvent publishes an adapter event to the raw-events Kafka topic.
+func (a *Adapter) publishEvent(ctx context.Context, event adapter.Event) error {
+	if a.producer == nil {
+		return fmt.Errorf("producer not initialized")
+	}
+
+	// Serialize event to JSON
+	data, err := json.Marshal(event)
+	if err != nil {
+		return fmt.Errorf("marshal event: %w", err)
+	}
+
+	// Generate partition key based on strategy
+	partitionKey := a.generatePartitionKey(&event)
+
+	// Create Kafka record
+	record := &kgo.Record{
+		Topic: "raw-events",
+		Key:   []byte(partitionKey),
+		Value: data,
+		Headers: []kgo.RecordHeader{
+			{Key: "chain", Value: []byte(event.Chain)},
+			{Key: "block_number", Value: []byte(fmt.Sprintf("%d", event.BlockNumber))},
+			{Key: "event_type", Value: []byte(event.EventType)},
+		},
+	}
+
+	// Produce synchronously for reliability
+	results := a.producer.ProduceSync(ctx, record)
+	if err := results.FirstErr(); err != nil {
+		return fmt.Errorf("produce: %w", err)
+	}
+
+	return nil
+}
+
+// generatePartitionKey creates a partition key based on the configured strategy.
+func (a *Adapter) generatePartitionKey(event *adapter.Event) string {
+	switch a.cfg.Broker.PartitionKeyStrategy {
+	case "chain_block":
+		return fmt.Sprintf("%s:%d", event.Chain, event.BlockNumber)
+	case "account":
+		if len(event.Accounts) > 0 {
+			return event.Accounts[0]
+		}
+		return event.Chain
+	case "event_type":
+		return event.EventType
+	case "round_robin":
+		return "" // Empty key = round-robin distribution
+	default:
+		return fmt.Sprintf("%s:%d", event.Chain, event.BlockNumber)
+	}
 }
 
 // fetchBlockLogs retrieves all logs for a specific block.

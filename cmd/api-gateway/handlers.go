@@ -26,6 +26,9 @@ type Server struct {
 
 	// WebSocket handler for subscription management
 	wsHandler *WebSocketHandler
+
+	// Function API handler
+	functionAPI *FunctionAPI
 }
 
 // NewServer creates a new API gateway server.
@@ -56,6 +59,11 @@ func (s *Server) SetWebSocketHandler(ws *WebSocketHandler) {
 	s.wsHandler = ws
 }
 
+// SetFunctionAPI sets the function API handler.
+func (s *Server) SetFunctionAPI(api *FunctionAPI) {
+	s.functionAPI = api
+}
+
 // Router returns the HTTP handler for the API gateway.
 func (s *Server) Router() http.Handler {
 	mux := http.NewServeMux()
@@ -78,6 +86,17 @@ func (s *Server) Router() http.Handler {
 	if s.wsHandler != nil {
 		mux.HandleFunc("/ws", s.wsHandler.HandleConnect)
 		mux.HandleFunc("/api/v1/ws", s.wsHandler.HandleConnect)
+	}
+
+	// Function registry endpoints
+	if s.functionAPI != nil {
+		s.functionAPI.RegisterRoutes(mux)
+	}
+
+	// Trigger management endpoints (standalone)
+	if s.functionAPI != nil {
+		mux.HandleFunc("/api/v1/triggers", s.functionAPI.handleTriggersRoot)
+		mux.HandleFunc("/api/v1/triggers/", s.functionAPI.handleTriggerByID)
 	}
 
 	// Profiling endpoints (pprof) for performance analysis

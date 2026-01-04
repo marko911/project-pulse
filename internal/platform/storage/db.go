@@ -64,6 +64,24 @@ type DB struct {
 
 // New creates a new database connection pool.
 func New(ctx context.Context, cfg Config) (*DB, error) {
+	// Apply defaults for pool settings if not specified
+	defaults := DefaultConfig()
+	if cfg.MaxConns == 0 {
+		cfg.MaxConns = defaults.MaxConns
+	}
+	if cfg.MinConns == 0 {
+		cfg.MinConns = defaults.MinConns
+	}
+	if cfg.MaxConnLifetime == 0 {
+		cfg.MaxConnLifetime = defaults.MaxConnLifetime
+	}
+	if cfg.MaxConnIdleTime == 0 {
+		cfg.MaxConnIdleTime = defaults.MaxConnIdleTime
+	}
+	if cfg.HealthCheckPeriod == 0 {
+		cfg.HealthCheckPeriod = defaults.HealthCheckPeriod
+	}
+
 	poolCfg, err := pgxpool.ParseConfig(cfg.ConnectionString())
 	if err != nil {
 		return nil, fmt.Errorf("parse config: %w", err)

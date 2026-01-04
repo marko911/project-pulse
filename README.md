@@ -1,8 +1,75 @@
-# Project Pulse
+# Mirador (Project Pulse)
 
-Project Pulse is a high-throughput, ultra-low-latency blockchain data platform designed to ingest, normalize, and deliver real-time events from Solana and EVM chains.
+Mirador is a high-throughput, ultra-low-latency blockchain data platform designed to ingest, normalize, and deliver real-time events from Solana and EVM chains. It enables users to deploy WASM functions that execute directly on the event stream.
 
-Unlike general-purpose indexers, Project Pulse focuses on two non-negotiable goals: **sub-50ms end-to-end latency** and **provable data correctness** (exactly-once delivery within commitment levels).
+Unlike general-purpose indexers, Mirador focuses on two non-negotiable goals: **sub-50ms end-to-end latency** and **provable data correctness** (exactly-once delivery within commitment levels).
+
+---
+
+## Quick Start
+
+### Prerequisites
+
+- **Go 1.21+** - For building services and WASM modules
+- **Docker & Docker Compose** - For running the local infrastructure stack
+- **Make** - For build automation
+
+### 1. Start the Platform
+
+```bash
+# Clone and enter the repository
+git clone <repository-url>
+cd mirador
+
+# Start all infrastructure services (Redpanda, TimescaleDB, Redis, MinIO, etc.)
+make up
+
+# Wait for all services to be healthy (~30 seconds)
+docker compose -f deployments/docker/docker-compose.yml ps
+```
+
+### 2. Build the CLI
+
+```bash
+go build -o bin/mirador ./cmd/mirador
+```
+
+### 3. Build and Deploy a WASM Function
+
+```bash
+# Build the example WASM module (uses standard Go with WASI target)
+cd examples/hello-world
+GOOS=wasip1 GOARCH=wasm go build -o hello.wasm .
+cd ../..
+
+# Deploy to the platform
+./bin/mirador deploy examples/hello-world/hello.wasm --name hello-world
+# Note the function ID returned (e.g., fn_1234567890)
+```
+
+### 4. Create a Trigger
+
+```bash
+# Create a trigger to invoke the function on Solana transactions
+./bin/mirador triggers create \
+  --function-id <function-id> \
+  --name solana-watcher \
+  --event-type transaction \
+  --filter-chain 1
+```
+
+### 5. Verify It Works
+
+```bash
+# Watch the WASM host logs for execution output
+docker compose -f deployments/docker/docker-compose.yml logs -f wasm-host 2>&1 | grep "source.*wasm"
+```
+
+You should see log output from your WASM function processing real Solana devnet transactions.
+
+For detailed verification steps, see [LOCAL_TEST.md](LOCAL_TEST.md).
+
+---
 
 ## Architecture Diagram
 
@@ -67,59 +134,253 @@ The system design allows us to make "no-regret" moves for a future where users r
 
 ## System Components
 
-- **Adapters (Solana/EVM):** Protocol-specific services that ingest raw data and normalize it into a canonical Protobuf format.
-- **Processing Core:** Handles deduplication (deterministic IDs), reorg detection, and writes to the hot store.
-- **Outbox Publisher:** Reads committed events from the database and publishes them to the delivery layer, ensuring atomicity.
-- **Delivery Gateway:** Stateless WebSocket/gRPC servers that handle client connections and subscription filtering.
+The platform consists of the following services:
 
-## First Proposed Steps
+| Component | Description | Docker Service |
+|-----------|-------------|----------------|
+| **Solana Adapter** | Ingests Solana transactions via WebSocket (devnet) or Geyser gRPC (mainnet). Normalizes to canonical format. | `adapter-solana` |
+| **EVM Adapter** | Ingests EVM chain logs via RPC. Normalizes to canonical format. | `adapter-evm` |
+| **Processor** | Core event processing - deduplication, reorg detection, normalization. | `processor` |
+| **Trigger Router** | Matches canonical events against registered triggers. Routes to WASM invocations. | `trigger-router` |
+| **WASM Host** | Executes user-deployed WASM functions with wasmtime runtime. Sandboxed execution. | `wasm-host` |
+| **Function API** | REST API for managing functions, triggers, and viewing invocation logs. | `function-api` |
+| **API Gateway** | WebSocket/REST gateway for real-time event streaming to clients. | `api-gateway` |
 
-This is the implementation plan for **Milestone 1: Ingestion & Canonical Stream MVP**. Each phase builds on the previous one.
+### Data Flow
 
-### Phase 1: Repository & Environment Setup
+```
+Blockchain → Adapter → Redpanda (canonical-events) → Trigger Router
+                                                           ↓
+                                    Redpanda (function-invocations)
+                                                           ↓
+                                                      WASM Host → Execute Function
+                                                           ↓
+                                    Redpanda (function-results) → Logs/Metrics
+```
 
-- [ ] **Initialize Project Repository**
-  - [ ] Run `go mod init <module_name>` to initialize the Go module
-  - [ ] Create standard directory structure (`cmd/`, `internal/`, `pkg/`, `deployments/`, `api/proto/`)
-  - [ ] Create a `Makefile` with standard commands (`build`, `test`, `lint`, `proto`)
-- [ ] **Docker Compose Environment**
-  - [ ] Create `docker-compose.yml` defining services for Redpanda, Postgres (TimescaleDB), and Redis
-  - [ ] Verify all services spin up and are accessible
+### Infrastructure Services
 
-### Phase 2: Canonical Schema Definition
+| Service | Purpose | Port |
+|---------|---------|------|
+| Redpanda | Kafka-compatible event streaming | 9092 |
+| TimescaleDB | PostgreSQL with time-series optimization | 5432 |
+| Redis | Caching, trigger lookups, function state | 16379 |
+| MinIO | S3-compatible storage for WASM modules | 9000/9001 |
+| NATS | Low-latency fanout for WebSocket delivery | 4222 |
+| Prometheus | Metrics collection | 9090 |
+| Grafana | Dashboards and visualization | 3000 |
 
-- [ ] **Define Protobuf Schema**
-  - [ ] Create `api/proto/v1/event.proto`
-  - [ ] Define `CanonicalEvent` message with fields: `chain`, `commitment`, `block_number`, `block_hash`, `tx_hash`, `event_type`, `payload`, `timestamp`
-  - [ ] Configure `buf` or `protoc` generation in `Makefile`
-  - [ ] Generate Go code from the proto definition
+---
 
-### Phase 3: Adapter Implementation (Solana)
+## Mirador CLI
 
-- [ ] **Solana Adapter Scaffold**
-  - [ ] Create `cmd/adapter-solana/` and `internal/adapter/solana/`
-  - [ ] Implement main entrypoint that loads configuration (env vars)
-- [ ] **Connect to Geyser gRPC**
-  - [ ] Implement a gRPC client to connect to a Solana Yellowstone Geyser endpoint
-  - [ ] Implement a subscription mechanism to receive block/transaction updates
-  - [ ] Log received events to stdout for verification
+The `mirador` CLI tool allows you to deploy and manage WASM functions, configure triggers, and monitor invocations.
 
-### Phase 4: Adapter Implementation (EVM)
+### Installation
 
-- [ ] **EVM Adapter Scaffold**
-  - [ ] Create `cmd/adapter-evm/` and `internal/adapter/evm/`
-  - [ ] Implement main entrypoint that loads configuration
-- [ ] **Connect to EVM RPC**
-  - [ ] Implement a standard `ethclient` or WebSocket connection to an EVM chain
-  - [ ] Implement log subscription (`eth_subscribe` "logs")
-  - [ ] Log received logs to stdout for verification
+```bash
+# Build from source
+go build -o mirador ./cmd/mirador
+```
 
-### Phase 5: Core Processing & Normalization
+### Getting Started
 
-- [ ] **Processor Scaffold**
-  - [ ] Create `cmd/processor/` and `internal/processor/`
-- [ ] **Normalization Logic**
-  - [ ] Implement a `Normalizer` interface
-  - [ ] Implement specific normalization logic for Solana events → `CanonicalEvent`
-  - [ ] Implement specific normalization logic for EVM logs → `CanonicalEvent`
-  - [ ] Write unit tests to verify mapping of fields
+#### 1. Deploy a WASM Function
+
+```bash
+# Deploy a function with automatic naming (uses filename)
+mirador deploy myfunction.wasm
+
+# Deploy with a custom name and version
+mirador deploy transform.wasm --name my-transformer --version 1.0.0
+```
+
+#### 2. Configure a Trigger
+
+Triggers define which blockchain events should invoke your function:
+
+```bash
+# Create a trigger for Transfer events
+mirador triggers create \
+  --function-id <function-id> \
+  --name transfer-watcher \
+  --event-type Transfer \
+  --filter-chain 1 \
+  --filter-addr 0xdAC17F958D2ee523a2206206994597C13D831ec7
+```
+
+#### 3. Monitor Invocations
+
+```bash
+# View recent invocation logs
+mirador logs <function-id>
+
+# View only failed invocations
+mirador logs <function-id> --errors
+
+# Limit results
+mirador logs <function-id> --limit 10
+```
+
+### Development Workflow
+
+Use dev mode for rapid iteration:
+
+```bash
+# Watch a file and auto-deploy on changes
+mirador dev myfunction.wasm --name my-function
+
+# Custom poll interval (seconds)
+mirador dev myfunction.wasm --interval 5
+```
+
+### Command Reference
+
+| Command | Description |
+|---------|-------------|
+| `mirador deploy <file>` | Deploy a WASM function |
+| `mirador dev <file>` | Watch and auto-deploy on changes |
+| `mirador functions list` | List deployed functions |
+| `mirador functions get <id>` | Get function details |
+| `mirador functions delete <id>` | Delete a function |
+| `mirador triggers list` | List all triggers |
+| `mirador triggers create` | Create a new trigger |
+| `mirador triggers get <id>` | Get trigger details |
+| `mirador triggers delete <id>` | Delete a trigger |
+| `mirador logs <function-id>` | Show invocation logs |
+
+### Environment Variables
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `MIRADOR_API_ENDPOINT` | `http://localhost:8090` | API gateway endpoint |
+| `MIRADOR_TENANT_ID` | `default` | Tenant identifier |
+
+### Example: Hello World Function
+
+See the [examples/hello-world](examples/hello-world/) directory for a complete example of building and deploying a WASM function.
+
+---
+
+## Local vs Production Setup
+
+### Local Development (Docker Compose)
+
+The local development stack runs all services in Docker Compose with these characteristics:
+
+- **Solana Adapter**: Connects to Solana Devnet via WebSocket (`wss://api.devnet.solana.com`)
+- **Storage**: All data stored in Docker volumes (ephemeral by default)
+- **Single-node**: All services run as single instances
+- **Ports**: Services exposed on localhost for debugging
+
+```bash
+# Start all services
+make up
+
+# View logs
+docker compose -f deployments/docker/docker-compose.yml logs -f
+
+# Stop and clean up
+make down
+```
+
+**Configuration via `.env`:**
+```bash
+# Optional: Override Solana endpoint
+SOLANA_WS_ENDPOINT=wss://api.mainnet-beta.solana.com
+
+# Optional: Use Geyser gRPC instead of WebSocket
+SOLANA_ADAPTER_TYPE=grpc
+GEYSER_ENDPOINT=http://your-geyser-endpoint:10000
+GEYSER_TOKEN=your-token
+```
+
+### Production (Kubernetes/GKE)
+
+Production deployment uses Kubernetes with:
+
+- **Solana Adapter**: Connects to Yellowstone Geyser gRPC for lower latency
+- **Managed Services**: Cloud SQL (TimescaleDB), Memorystore (Redis), Cloud Storage
+- **Horizontal Scaling**: Multiple replicas per service with partition-based load distribution
+- **Monitoring**: Prometheus + Grafana with alerting
+
+See `deployments/k8s/` for Kubernetes manifests and `deployments/terraform/` for infrastructure provisioning.
+
+### Key Differences
+
+| Aspect | Local | Production |
+|--------|-------|------------|
+| Solana Source | WebSocket (devnet) | Geyser gRPC (mainnet) |
+| Kafka | Redpanda (single node) | Redpanda cluster or Confluent |
+| Database | TimescaleDB (Docker) | Cloud SQL with read replicas |
+| WASM Storage | MinIO (local) | GCS bucket |
+| Replicas | 1 per service | Auto-scaled |
+| Data Retention | Ephemeral | Hot (72h) + Cold (Parquet) |
+
+---
+
+## Troubleshooting
+
+### Events not triggering WASM execution
+
+1. **Check adapter is receiving events:**
+   ```bash
+   docker compose -f deployments/docker/docker-compose.yml logs adapter-solana | tail -20
+   ```
+
+2. **Check trigger-router is matching:**
+   ```bash
+   docker compose -f deployments/docker/docker-compose.yml logs trigger-router | grep -i "match\|trigger"
+   ```
+
+3. **Check WASM host is executing:**
+   ```bash
+   docker compose -f deployments/docker/docker-compose.yml logs wasm-host | grep -i "execut\|invoke"
+   ```
+
+### WASM module not found
+
+Ensure the module was uploaded to MinIO:
+```bash
+docker exec pulse-minio mc ls local/wasm-modules/
+```
+
+### Database connection issues
+
+Verify TimescaleDB is healthy:
+```bash
+docker exec pulse-timescaledb pg_isready -U pulse
+```
+
+---
+
+## Development
+
+### Building Services
+
+```bash
+# Build all binaries
+make build
+
+# Build specific service
+go build -o bin/adapter-solana ./cmd/adapter-solana
+
+# Build WASM example
+cd examples/hello-world && GOOS=wasip1 GOARCH=wasm go build -o hello.wasm .
+```
+
+### Running Tests
+
+```bash
+make test
+```
+
+### Useful Make Targets
+
+| Target | Description |
+|--------|-------------|
+| `make up` | Start Docker Compose stack |
+| `make down` | Stop and remove containers |
+| `make build` | Build all Go binaries |
+| `make test` | Run tests |
+| `make lint` | Run linters |

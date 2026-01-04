@@ -95,7 +95,13 @@ func main() {
 	}
 	defer db.Close()
 
-	slog.Info("connected to database", "host", *dbHost, "database", *dbName)
+	// Run database migrations
+	if err := db.Migrate(ctx); err != nil {
+		slog.Error("failed to run database migrations", "error", err)
+		os.Exit(1)
+	}
+
+	slog.Info("connected to database and applied migrations", "host", *dbHost, "database", *dbName)
 
 	// Create and run the builder
 	builder, err := NewBuilder(BuilderConfig{

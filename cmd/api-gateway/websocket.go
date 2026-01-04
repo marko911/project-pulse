@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"log/slog"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -14,19 +15,12 @@ import (
 	protov1 "github.com/mirador/pulse/pkg/proto/v1"
 )
 
-var upgrader = websocket.Upgrader{
-	ReadBufferSize:  1024,
-	WriteBufferSize: 1024,
-	CheckOrigin: func(r *http.Request) bool {
-		// TODO: Configure allowed origins from config
-		return true
-	},
-}
-
 // WebSocketHandler handles WebSocket connections and subscription management.
 type WebSocketHandler struct {
-	subManager *subscription.RedisManager
-	logger     *slog.Logger
+	subManager     *subscription.RedisManager
+	logger         *slog.Logger
+	allowedOrigins []string // nil means allow all origins
+	upgrader       websocket.Upgrader
 
 	// Active connections
 	mu          sync.RWMutex
@@ -42,17 +36,67 @@ type wsConnection struct {
 }
 
 // NewWebSocketHandler creates a new WebSocket handler.
-func NewWebSocketHandler(subManager *subscription.RedisManager, logger *slog.Logger) *WebSocketHandler {
-	return &WebSocketHandler{
-		subManager:  subManager,
-		logger:      logger.With("component", "websocket"),
-		connections: make(map[string]*wsConnection),
+// allowedOrigins specifies which origins are allowed to connect via WebSocket.
+// If nil or empty, all origins are allowed.
+func NewWebSocketHandler(subManager *subscription.RedisManager, allowedOrigins []string, logger *slog.Logger) *WebSocketHandler {
+	h := &WebSocketHandler{
+		subManager:     subManager,
+		allowedOrigins: allowedOrigins,
+		logger:         logger.With("component", "websocket"),
+		connections:    make(map[string]*wsConnection),
 	}
+
+	// Configure upgrader with origin check
+	h.upgrader = websocket.Upgrader{
+		ReadBufferSize:  1024,
+		WriteBufferSize: 1024,
+		CheckOrigin:     h.checkOrigin,
+	}
+
+	return h
+}
+
+// checkOrigin validates the request origin against allowed origins.
+func (h *WebSocketHandler) checkOrigin(r *http.Request) bool {
+	// If no allowed origins configured, allow all
+	if len(h.allowedOrigins) == 0 {
+		return true
+	}
+
+	origin := r.Header.Get("Origin")
+	if origin == "" {
+		// No origin header - allow (same-origin requests may not have it)
+		return true
+	}
+
+	// Check against allowed origins
+	for _, allowed := range h.allowedOrigins {
+		if allowed == "*" {
+			return true
+		}
+		// Case-insensitive match
+		if strings.EqualFold(origin, allowed) {
+			return true
+		}
+		// Wildcard subdomain match (e.g., "*.example.com")
+		if strings.HasPrefix(allowed, "*.") {
+			suffix := allowed[1:] // ".example.com"
+			if strings.HasSuffix(strings.ToLower(origin), strings.ToLower(suffix)) {
+				return true
+			}
+		}
+	}
+
+	h.logger.Warn("websocket connection rejected: origin not allowed",
+		"origin", origin,
+		"allowed_origins", h.allowedOrigins,
+	)
+	return false
 }
 
 // HandleConnect upgrades HTTP to WebSocket and manages the connection.
 func (h *WebSocketHandler) HandleConnect(w http.ResponseWriter, r *http.Request) {
-	conn, err := upgrader.Upgrade(w, r, nil)
+	conn, err := h.upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		h.logger.Error("websocket upgrade failed", "error", err)
 		return

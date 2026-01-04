@@ -16,5 +16,11 @@ This file tracks all major tracks for the project. Each track has its own detail
 ## [x] Track: Milestone 4: Performance & WebSocket Scale
 *Link: [./conductor/tracks/milestone_4_performance_scale/](./conductor/tracks/milestone_4_performance_scale/)*
 
-## [ ] Track: Milestone 5: Phase 2: WASM Compute Platform
+## [x] Track: Milestone 5: Phase 2: WASM Compute Platform
 *Link: [./conductor/tracks/milestone_5_wasm_compute/](./conductor/tracks/milestone_5_wasm_compute/)*
+
+## [ ] Track: Milestone 5.5: Developer Experience Polish
+*Link: [./conductor/tracks/milestone_5_5_dev_experience/](./conductor/tracks/milestone_5_5_dev_experience/)*
+
+## [ ] Track: Milestone 7: Implementation Hardening
+*Link: [./conductor/tracks/milestone_7_implementation_hardening/](./conductor/tracks/milestone_7_implementation_hardening/)*

@@ -7,13 +7,19 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"log/slog"
 	"os"
 	"os/signal"
+	"strings"
+	"sync"
 	"syscall"
 
+	"github.com/twmb/franz-go/pkg/kgo"
+
+	"github.com/mirador/pulse/internal/adapter"
 	"github.com/mirador/pulse/internal/processor"
 )
 
@@ -69,8 +75,6 @@ func main() {
 		PartitionKeyStrategy: *partitionKeyStrategy,
 	}
 
-	_ = cfg // TODO: Use config to create processor instance
-
 	// Setup context with signal handling
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -85,17 +89,232 @@ func main() {
 		cancel()
 	}()
 
-	// TODO: Initialize Kafka/Redpanda consumer
-	// TODO: Initialize processor with normalizers
-	// TODO: Start processing loop
+	// Initialize processor service
+	svc, err := newProcessorService(ctx, cfg)
+	if err != nil {
+		logger.Error("failed to initialize processor", "error", err)
+		os.Exit(1)
+	}
 
 	logger.Info("processor running, waiting for events...")
 
-	// Wait for shutdown
-	<-ctx.Done()
+	// Run processing loop
+	if err := svc.Run(ctx); err != nil && err != context.Canceled {
+		logger.Error("processor error", "error", err)
+		os.Exit(1)
+	}
 
 	// Graceful shutdown
 	logger.Info("processor shutdown complete")
+}
+
+// processorService encapsulates the processor's Kafka consumer, producer, and normalization logic.
+type processorService struct {
+	cfg        processor.Config
+	consumer   *kgo.Client
+	producer   *kgo.Client
+	normalizer *processor.NormalizerRegistry
+	wg         sync.WaitGroup
+}
+
+// newProcessorService initializes a new processor service with Kafka connections.
+func newProcessorService(ctx context.Context, cfg processor.Config) (*processorService, error) {
+	brokerList := strings.Split(cfg.BrokerEndpoint, ",")
+	for i := range brokerList {
+		brokerList[i] = strings.TrimSpace(brokerList[i])
+	}
+
+	// Create Kafka consumer for raw-events
+	consumer, err := kgo.NewClient(
+		kgo.SeedBrokers(brokerList...),
+		kgo.ConsumerGroup(cfg.ConsumerGroup),
+		kgo.ConsumeTopics(cfg.InputTopic),
+		kgo.ConsumeResetOffset(kgo.NewOffset().AtStart()),
+		kgo.DisableAutoCommit(),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("create kafka consumer: %w", err)
+	}
+
+	// Create Kafka producer for canonical-events
+	producer, err := kgo.NewClient(
+		kgo.SeedBrokers(brokerList...),
+		kgo.MaxProduceRequestsInflightPerBroker(1),
+		kgo.RequiredAcks(kgo.AllISRAcks()),
+		kgo.ProducerBatchCompression(kgo.SnappyCompression()),
+		kgo.RecordRetries(5),
+	)
+	if err != nil {
+		consumer.Close()
+		return nil, fmt.Errorf("create kafka producer: %w", err)
+	}
+
+	slog.Info("connected to kafka",
+		"brokers", cfg.BrokerEndpoint,
+		"consumer_group", cfg.ConsumerGroup,
+		"input_topic", cfg.InputTopic,
+		"output_topic", cfg.OutputTopic,
+	)
+
+	return &processorService{
+		cfg:        cfg,
+		consumer:   consumer,
+		producer:   producer,
+		normalizer: processor.NewNormalizerRegistry(),
+	}, nil
+}
+
+// Run starts the processing loop with worker pool.
+func (s *processorService) Run(ctx context.Context) error {
+	// Create work channel
+	eventCh := make(chan *kgo.Record, s.cfg.WorkerCount*10)
+
+	// Start worker pool
+	for i := 0; i < s.cfg.WorkerCount; i++ {
+		s.wg.Add(1)
+		go s.worker(ctx, i, eventCh)
+	}
+
+	// Consume loop
+	for {
+		select {
+		case <-ctx.Done():
+			close(eventCh)
+			s.wg.Wait()
+			return s.shutdown()
+		default:
+		}
+
+		fetches := s.consumer.PollFetches(ctx)
+		if errs := fetches.Errors(); len(errs) > 0 {
+			for _, e := range errs {
+				if e.Err == context.Canceled {
+					continue
+				}
+				slog.Error("fetch error", "topic", e.Topic, "partition", e.Partition, "error", e.Err)
+			}
+			continue
+		}
+
+		fetches.EachRecord(func(record *kgo.Record) {
+			select {
+			case eventCh <- record:
+			case <-ctx.Done():
+			}
+		})
+
+		// Commit offsets after processing
+		if err := s.consumer.CommitUncommittedOffsets(ctx); err != nil && err != context.Canceled {
+			slog.Error("commit error", "error", err)
+		}
+	}
+}
+
+// worker processes raw events and produces canonical events.
+func (s *processorService) worker(ctx context.Context, id int, eventCh <-chan *kgo.Record) {
+	defer s.wg.Done()
+	slog.Debug("worker started", "worker_id", id)
+
+	for record := range eventCh {
+		if err := s.processEvent(ctx, record); err != nil {
+			slog.Error("failed to process event",
+				"worker_id", id,
+				"offset", record.Offset,
+				"error", err,
+			)
+		}
+	}
+
+	slog.Debug("worker stopped", "worker_id", id)
+}
+
+// processEvent normalizes a raw event and publishes the canonical event.
+func (s *processorService) processEvent(ctx context.Context, record *kgo.Record) error {
+	// Deserialize raw adapter event
+	var event adapter.Event
+	if err := json.Unmarshal(record.Value, &event); err != nil {
+		return fmt.Errorf("unmarshal raw event: %w", err)
+	}
+
+	// Normalize to canonical format
+	canonical, err := s.normalizer.Normalize(ctx, event)
+	if err != nil {
+		return fmt.Errorf("normalize event: %w", err)
+	}
+
+	// Serialize canonical event
+	data, err := json.Marshal(canonical)
+	if err != nil {
+		return fmt.Errorf("marshal canonical event: %w", err)
+	}
+
+	// Generate partition key based on strategy
+	partitionKey := s.generatePartitionKey(&event)
+
+	// Produce to output topic
+	outRecord := &kgo.Record{
+		Topic: s.cfg.OutputTopic,
+		Key:   []byte(partitionKey),
+		Value: data,
+		Headers: []kgo.RecordHeader{
+			{Key: "event_id", Value: []byte(canonical.EventId)},
+			{Key: "chain", Value: []byte(event.Chain)},
+			{Key: "event_type", Value: []byte(event.EventType)},
+		},
+	}
+
+	results := s.producer.ProduceSync(ctx, outRecord)
+	if err := results.FirstErr(); err != nil {
+		return fmt.Errorf("produce canonical event: %w", err)
+	}
+
+	slog.Debug("processed event",
+		"event_id", canonical.EventId,
+		"chain", event.Chain,
+		"block", event.BlockNumber,
+		"event_type", event.EventType,
+	)
+
+	return nil
+}
+
+// generatePartitionKey creates a partition key based on the configured strategy.
+func (s *processorService) generatePartitionKey(event *adapter.Event) string {
+	switch s.cfg.PartitionKeyStrategy {
+	case "chain_block":
+		return fmt.Sprintf("%s:%d", event.Chain, event.BlockNumber)
+	case "account":
+		if len(event.Accounts) > 0 {
+			return event.Accounts[0]
+		}
+		return event.Chain
+	case "event_type":
+		return event.EventType
+	case "round_robin":
+		return "" // Empty key = round-robin distribution
+	default:
+		return fmt.Sprintf("%s:%d", event.Chain, event.BlockNumber)
+	}
+}
+
+// shutdown gracefully shuts down the processor service.
+func (s *processorService) shutdown() error {
+	slog.Info("shutting down processor service")
+
+	// Final commit
+	if err := s.consumer.CommitUncommittedOffsets(context.Background()); err != nil {
+		slog.Error("final commit error", "error", err)
+	}
+
+	// Flush producer
+	if err := s.producer.Flush(context.Background()); err != nil {
+		slog.Error("producer flush error", "error", err)
+	}
+
+	s.consumer.Close()
+	s.producer.Close()
+
+	return nil
 }
 
 // getEnv returns environment variable value or default.
