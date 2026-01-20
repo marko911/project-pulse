@@ -73,7 +73,7 @@ For detailed verification steps, see [LOCAL_TEST.md](LOCAL_TEST.md).
 
 ## Architecture Diagram
 
-![Project Pulse architecture diagram](docs/architecture.svg)
+![Mirador WASM Serverless Compute Platform](docs/architecture-diagram.png)
 
 ## Architectural Philosophy
 
