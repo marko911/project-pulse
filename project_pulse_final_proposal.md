@@ -42,7 +42,7 @@ Project Pulse is a high-throughput, ultra-low-latency blockchain data platform t
 
 ```
 ┌──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
-│                                                   MIRADOR PLATFORM                                                       │
+│                                                   PULSE PLATFORM                                                       │
 └──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
 
    ┌───────────────────────────────┐                                ┌───────────────────────────────┐
@@ -423,7 +423,7 @@ Runs continuously in tiers:
 ### 10.3 Deployment UX
 
 - CLI + GitOps model:
-  - `mirador deploy` uploads wasm module + manifest (triggers, env, limits)
+  - `pulse deploy` uploads wasm module + manifest (triggers, env, limits)
   - versioned releases and rollbacks
 - Local dev:
   - run functions against recorded fixtures and replayed block ranges

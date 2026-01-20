@@ -15,7 +15,7 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/mirador/pulse/internal/wasm"
+	"github.com/marko911/project-pulse/internal/wasm"
 )
 
 func main() {

@@ -16,8 +16,8 @@ When triggered by a Solana transaction event, this function:
 ## Prerequisites
 
 - **Go 1.21+** with WASM support (`GOOS=wasip1`)
-- Running Mirador platform (`make up`)
-- Built CLI (`go build -o bin/mirador ./cmd/mirador`)
+- Running Pulse platform (`make up`)
+- Built CLI (`go build -o bin/pulse ./cmd/pulse`)
 
 ## Build
 
@@ -35,7 +35,7 @@ cd examples/hello-world && GOOS=wasip1 GOARCH=wasm go build -o hello.wasm .
 
 ```bash
 # From repository root
-./bin/mirador deploy examples/hello-world/hello.wasm --name hello-world
+./bin/pulse deploy examples/hello-world/hello.wasm --name hello-world
 ```
 
 Note the function ID returned (e.g., `fn_1234567890`).
@@ -44,7 +44,7 @@ Note the function ID returned (e.g., `fn_1234567890`).
 
 ```bash
 # Trigger on all Solana transactions
-./bin/mirador triggers create \
+./bin/pulse triggers create \
   --function-id <function-id> \
   --name solana-watcher \
   --event-type transaction \
@@ -123,5 +123,5 @@ Rebuild and redeploy:
 
 ```bash
 GOOS=wasip1 GOARCH=wasm go build -o hello.wasm .
-./bin/mirador deploy hello.wasm --name hello-world
+./bin/pulse deploy hello.wasm --name hello-world
 ```

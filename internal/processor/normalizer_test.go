@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mirador/pulse/internal/adapter"
-	protov1 "github.com/mirador/pulse/pkg/proto/v1"
+	"github.com/marko911/project-pulse/internal/adapter"
+	protov1 "github.com/marko911/project-pulse/pkg/proto/v1"
 )
 
 func TestSolanaNormalizer_Normalize(t *testing.T) {

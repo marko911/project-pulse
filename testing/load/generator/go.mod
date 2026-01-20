@@ -1,4 +1,4 @@
-module github.com/mirador/pulse/testing/load/generator
+module github.com/marko911/project-pulse/testing/load/generator
 
 go 1.22
 

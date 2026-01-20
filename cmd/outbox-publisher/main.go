@@ -11,7 +11,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/mirador/pulse/internal/platform/storage"
+	"github.com/marko911/project-pulse/internal/platform/storage"
 )
 
 func main() {

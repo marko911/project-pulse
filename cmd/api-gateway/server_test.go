@@ -7,8 +7,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/mirador/pulse/internal/correctness"
-	protov1 "github.com/mirador/pulse/pkg/proto/v1"
+	"github.com/marko911/project-pulse/internal/correctness"
+	protov1 "github.com/marko911/project-pulse/pkg/proto/v1"
 )
 
 func TestNewServer(t *testing.T) {

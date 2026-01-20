@@ -16,7 +16,7 @@ import (
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/twmb/franz-go/pkg/kgo"
 
-	"github.com/mirador/pulse/internal/adapter"
+	"github.com/marko911/project-pulse/internal/adapter"
 )
 
 // Adapter ingests events from EVM-compatible blockchains and publishes them

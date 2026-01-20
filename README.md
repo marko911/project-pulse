@@ -1,8 +1,8 @@
-# Mirador (Project Pulse)
+# Pulse (Project Pulse)
 
-Mirador is a high-throughput, ultra-low-latency blockchain data platform designed to ingest, normalize, and deliver real-time events from Solana and EVM chains. It enables users to deploy WASM functions that execute directly on the event stream.
+Pulse is a high-throughput, ultra-low-latency blockchain data platform designed to ingest, normalize, and deliver real-time events from Solana and EVM chains. It enables users to deploy WASM functions that execute directly on the event stream.
 
-Unlike general-purpose indexers, Mirador focuses on two non-negotiable goals: **sub-50ms end-to-end latency** and **provable data correctness** (exactly-once delivery within commitment levels).
+Unlike general-purpose indexers, Pulse focuses on two non-negotiable goals: **sub-50ms end-to-end latency** and **provable data correctness** (exactly-once delivery within commitment levels).
 
 ---
 
@@ -19,7 +19,7 @@ Unlike general-purpose indexers, Mirador focuses on two non-negotiable goals: **
 ```bash
 # Clone and enter the repository
 git clone <repository-url>
-cd mirador
+cd pulse
 
 # Start all infrastructure services (Redpanda, TimescaleDB, Redis, MinIO, etc.)
 make up
@@ -31,7 +31,7 @@ docker compose -f deployments/docker/docker-compose.yml ps
 ### 2. Build the CLI
 
 ```bash
-go build -o bin/mirador ./cmd/mirador
+go build -o bin/pulse ./cmd/pulse
 ```
 
 ### 3. Build and Deploy a WASM Function
@@ -43,7 +43,7 @@ GOOS=wasip1 GOARCH=wasm go build -o hello.wasm .
 cd ../..
 
 # Deploy to the platform
-./bin/mirador deploy examples/hello-world/hello.wasm --name hello-world
+./bin/pulse deploy examples/hello-world/hello.wasm --name hello-world
 # Note the function ID returned (e.g., fn_1234567890)
 ```
 
@@ -51,7 +51,7 @@ cd ../..
 
 ```bash
 # Create a trigger to invoke the function on Solana transactions
-./bin/mirador triggers create \
+./bin/pulse triggers create \
   --function-id <function-id> \
   --name solana-watcher \
   --event-type transaction \
@@ -73,7 +73,7 @@ For detailed verification steps, see [LOCAL_TEST.md](LOCAL_TEST.md).
 
 ## Architecture Diagram
 
-![Mirador WASM Serverless Compute Platform](docs/architecture-diagram.png)
+![Pulse WASM Serverless Compute Platform](docs/architecture-diagram.png)
 
 ## Architectural Philosophy
 
@@ -172,15 +172,15 @@ Blockchain → Adapter → Redpanda (canonical-events) → Trigger Router
 
 ---
 
-## Mirador CLI
+## Pulse CLI
 
-The `mirador` CLI tool allows you to deploy and manage WASM functions, configure triggers, and monitor invocations.
+The `pulse` CLI tool allows you to deploy and manage WASM functions, configure triggers, and monitor invocations.
 
 ### Installation
 
 ```bash
 # Build from source
-go build -o mirador ./cmd/mirador
+go build -o pulse ./cmd/pulse
 ```
 
 ### Getting Started
@@ -189,10 +189,10 @@ go build -o mirador ./cmd/mirador
 
 ```bash
 # Deploy a function with automatic naming (uses filename)
-mirador deploy myfunction.wasm
+pulse deploy myfunction.wasm
 
 # Deploy with a custom name and version
-mirador deploy transform.wasm --name my-transformer --version 1.0.0
+pulse deploy transform.wasm --name my-transformer --version 1.0.0
 ```
 
 #### 2. Configure a Trigger
@@ -201,7 +201,7 @@ Triggers define which blockchain events should invoke your function:
 
 ```bash
 # Create a trigger for Transfer events
-mirador triggers create \
+pulse triggers create \
   --function-id <function-id> \
   --name transfer-watcher \
   --event-type Transfer \
@@ -213,13 +213,13 @@ mirador triggers create \
 
 ```bash
 # View recent invocation logs
-mirador logs <function-id>
+pulse logs <function-id>
 
 # View only failed invocations
-mirador logs <function-id> --errors
+pulse logs <function-id> --errors
 
 # Limit results
-mirador logs <function-id> --limit 10
+pulse logs <function-id> --limit 10
 ```
 
 ### Development Workflow
@@ -228,33 +228,33 @@ Use dev mode for rapid iteration:
 
 ```bash
 # Watch a file and auto-deploy on changes
-mirador dev myfunction.wasm --name my-function
+pulse dev myfunction.wasm --name my-function
 
 # Custom poll interval (seconds)
-mirador dev myfunction.wasm --interval 5
+pulse dev myfunction.wasm --interval 5
 ```
 
 ### Command Reference
 
 | Command | Description |
 |---------|-------------|
-| `mirador deploy <file>` | Deploy a WASM function |
-| `mirador dev <file>` | Watch and auto-deploy on changes |
-| `mirador functions list` | List deployed functions |
-| `mirador functions get <id>` | Get function details |
-| `mirador functions delete <id>` | Delete a function |
-| `mirador triggers list` | List all triggers |
-| `mirador triggers create` | Create a new trigger |
-| `mirador triggers get <id>` | Get trigger details |
-| `mirador triggers delete <id>` | Delete a trigger |
-| `mirador logs <function-id>` | Show invocation logs |
+| `pulse deploy <file>` | Deploy a WASM function |
+| `pulse dev <file>` | Watch and auto-deploy on changes |
+| `pulse functions list` | List deployed functions |
+| `pulse functions get <id>` | Get function details |
+| `pulse functions delete <id>` | Delete a function |
+| `pulse triggers list` | List all triggers |
+| `pulse triggers create` | Create a new trigger |
+| `pulse triggers get <id>` | Get trigger details |
+| `pulse triggers delete <id>` | Delete a trigger |
+| `pulse logs <function-id>` | Show invocation logs |
 
 ### Environment Variables
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `MIRADOR_API_ENDPOINT` | `http://localhost:8090` | API gateway endpoint |
-| `MIRADOR_TENANT_ID` | `default` | Tenant identifier |
+| `PULSE_API_ENDPOINT` | `http://localhost:8090` | API gateway endpoint |
+| `PULSE_TENANT_ID` | `default` | Tenant identifier |
 
 ### Example: Hello World Function
 

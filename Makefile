@@ -1,4 +1,4 @@
-# Mirador / Project Pulse Makefile
+# Pulse / Project Pulse Makefile
 # High-throughput blockchain data platform
 
 # Variables
@@ -94,7 +94,7 @@ run:
 
 # Help
 help:
-	@echo "Mirador Makefile targets:"
+	@echo "Pulse Makefile targets:"
 	@echo "  all       - Build all services (default)"
 	@echo "  build     - Build all services"
 	@echo "  test      - Run tests with race detection and coverage"

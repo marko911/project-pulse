@@ -1,12 +1,12 @@
-# How Mirador Works
+# How Pulse Works
 
-This document explains how Mirador processes blockchain events and executes your code, written for developers who want a clear mental model of the system.
+This document explains how Pulse processes blockchain events and executes your code, written for developers who want a clear mental model of the system.
 
 ---
 
 ## The Big Picture
 
-Say you want low-latency access to Solana transactions—maybe you're building a trading bot, tracking whale movements, or monitoring a specific program. Instead of running your own RPC node and polling, you deploy a small piece of code (a WASM module) to Mirador, and it executes your code every time a matching event arrives.
+Say you want low-latency access to Solana transactions—maybe you're building a trading bot, tracking whale movements, or monitoring a specific program. Instead of running your own RPC node and polling, you deploy a small piece of code (a WASM module) to Pulse, and it executes your code every time a matching event arrives.
 
 Here's what that looks like:
 
@@ -43,7 +43,7 @@ func main() {
 
 Your function has access to a few host functions provided by the platform:
 - `get_input()` - Read the event that triggered your function
-- `log(level, message)` - Write logs (visible in `mirador logs`)
+- `log(level, message)` - Write logs (visible in `pulse logs`)
 - `output(data)` - Return data from your function
 
 ### Step 2: Compile to WASM
@@ -57,7 +57,7 @@ This produces a `.wasm` file—a sandboxed binary that can't access your filesys
 ### Step 3: Deploy
 
 ```bash
-mirador deploy myfunction.wasm --name my-function
+pulse deploy myfunction.wasm --name my-function
 ```
 
 Behind the scenes:
@@ -68,7 +68,7 @@ Behind the scenes:
 ### Step 4: Create a Trigger
 
 ```bash
-mirador triggers create \
+pulse triggers create \
   --function-id fn_1234567890 \
   --name solana-watcher \
   --event-type transaction \
@@ -175,7 +175,7 @@ Each invocation is isolated. If your code crashes, it doesn't affect anything el
 
 **What it does:** Manages your functions and triggers.
 
-This is what the `mirador` CLI talks to. It handles:
+This is what the `pulse` CLI talks to. It handles:
 - Uploading WASM modules to storage
 - CRUD operations for functions and triggers
 - Querying invocation logs
@@ -214,7 +214,7 @@ This is what the `mirador` CLI talks to. It handles:
 │                                   ▼                                         │
 │                          ┌─────────────────┐                                │
 │                          │   Your Logs     │                                │
-│                          │ (mirador logs)  │                                │
+│                          │ (pulse logs)  │                                │
 │                          └─────────────────┘                                │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
@@ -226,7 +226,7 @@ This is what the `mirador` CLI talks to. It handles:
 3. **T+~55ms:** Trigger Router receives event, finds your trigger, creates invocation
 4. **T+~60ms:** WASM Host receives invocation, loads your module (cached), executes
 5. **T+~65ms:** Your function runs, logs output, completes
-6. **T+~70ms:** Results published, visible in `mirador logs`
+6. **T+~70ms:** Results published, visible in `pulse logs`
 
 Total latency from chain to your code: **~60-100ms** depending on network conditions.
 

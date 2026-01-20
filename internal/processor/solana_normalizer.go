@@ -7,8 +7,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/mirador/pulse/internal/adapter"
-	protov1 "github.com/mirador/pulse/pkg/proto/v1"
+	"github.com/marko911/project-pulse/internal/adapter"
+	protov1 "github.com/marko911/project-pulse/pkg/proto/v1"
 )
 
 // SolanaNormalizer converts Solana adapter events to canonical format.

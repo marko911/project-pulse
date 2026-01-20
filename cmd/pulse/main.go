@@ -1,15 +1,15 @@
-// Command mirador is the CLI for managing Mirador deployments.
+// Command pulse is the CLI for managing Pulse deployments.
 //
 // Usage:
 //
-//	mirador deploy <wasm-file> --name <name> [--version <version>]
-//	mirador functions list
-//	mirador functions get <id>
-//	mirador functions delete <id>
-//	mirador triggers list
-//	mirador triggers create --function-id <id> --name <name> --event-type <type>
-//	mirador triggers get <id>
-//	mirador triggers delete <id>
+//	pulse deploy <wasm-file> --name <name> [--version <version>]
+//	pulse functions list
+//	pulse functions get <id>
+//	pulse functions delete <id>
+//	pulse triggers list
+//	pulse triggers create --function-id <id> --name <name> --event-type <type>
+//	pulse triggers get <id>
+//	pulse triggers delete <id>
 package main
 
 import (
@@ -30,8 +30,8 @@ import (
 )
 
 var (
-	apiEndpoint = envOrDefault("MIRADOR_API_ENDPOINT", "http://localhost:8090")
-	tenantID    = envOrDefault("MIRADOR_TENANT_ID", "default")
+	apiEndpoint = envOrDefault("PULSE_API_ENDPOINT", "http://localhost:8090")
+	tenantID    = envOrDefault("PULSE_TENANT_ID", "default")
 )
 
 func main() {
@@ -45,32 +45,32 @@ func main() {
 		deployCmd(os.Args[2:])
 	case "functions":
 		if len(os.Args) < 3 {
-			fmt.Println("Usage: mirador functions <list|get|delete>")
+			fmt.Println("Usage: pulse functions <list|get|delete>")
 			os.Exit(1)
 		}
 		functionsCmd(os.Args[2], os.Args[3:])
 	case "triggers":
 		if len(os.Args) < 3 {
-			fmt.Println("Usage: mirador triggers <list|create|get|delete>")
+			fmt.Println("Usage: pulse triggers <list|create|get|delete>")
 			os.Exit(1)
 		}
 		triggersCmd(os.Args[2], os.Args[3:])
 	case "logs":
 		if len(os.Args) < 3 {
-			fmt.Println("Usage: mirador logs <function-id> [options]")
+			fmt.Println("Usage: pulse logs <function-id> [options]")
 			os.Exit(1)
 		}
 		logsCmd(os.Args[2:])
 	case "dev":
 		if len(os.Args) < 3 {
-			fmt.Println("Usage: mirador dev <wasm-file> [options]")
+			fmt.Println("Usage: pulse dev <wasm-file> [options]")
 			os.Exit(1)
 		}
 		devCmd(os.Args[2:])
 	case "help", "--help", "-h":
 		printUsage()
 	case "version", "--version", "-v":
-		fmt.Println("mirador version 0.1.0")
+		fmt.Println("pulse version 0.1.0")
 	default:
 		fmt.Printf("Unknown command: %s\n", os.Args[1])
 		printUsage()
@@ -79,21 +79,21 @@ func main() {
 }
 
 func printUsage() {
-	fmt.Println(`mirador - CLI for Mirador WASM function deployment
+	fmt.Println(`pulse - CLI for Pulse WASM function deployment
 
 Usage:
-  mirador deploy <wasm-file> [options]    Deploy a WASM function
-  mirador dev <wasm-file> [options]       Watch and auto-deploy on changes
-  mirador functions list                  List deployed functions
-  mirador functions get <id>              Get function details
-  mirador functions delete <id>           Delete a function
-  mirador triggers list                   List all triggers
-  mirador triggers create [options]       Create a new trigger
-  mirador triggers get <id>               Get trigger details
-  mirador triggers delete <id>            Delete a trigger
-  mirador logs <function-id> [options]    Show function invocation logs
-  mirador help                            Show this help
-  mirador version                         Show version
+  pulse deploy <wasm-file> [options]    Deploy a WASM function
+  pulse dev <wasm-file> [options]       Watch and auto-deploy on changes
+  pulse functions list                  List deployed functions
+  pulse functions get <id>              Get function details
+  pulse functions delete <id>           Delete a function
+  pulse triggers list                   List all triggers
+  pulse triggers create [options]       Create a new trigger
+  pulse triggers get <id>               Get trigger details
+  pulse triggers delete <id>            Delete a trigger
+  pulse logs <function-id> [options]    Show function invocation logs
+  pulse help                            Show this help
+  pulse version                         Show version
 
 Deploy Options:
   --name        Function name (required)
@@ -119,20 +119,20 @@ Logs Options:
   --errors      Show only failed invocations
 
 Environment Variables:
-  MIRADOR_API_ENDPOINT  API endpoint (default: http://localhost:8090)
-  MIRADOR_TENANT_ID     Tenant ID (default: default)
+  PULSE_API_ENDPOINT  API endpoint (default: http://localhost:8090)
+  PULSE_TENANT_ID     Tenant ID (default: default)
 
 Examples:
-  mirador deploy myfunction.wasm --name my-function
-  mirador deploy transform.wasm --name transformer --version 2.0.0
-  mirador dev myfunction.wasm --name my-function
-  mirador functions list
-  mirador functions delete fn_123456789
-  mirador triggers list
-  mirador triggers create --function-id fn_123 --name my-trigger --event-type Transfer
-  mirador triggers delete trg_456789
-  mirador logs fn_123456789
-  mirador logs fn_123456789 --limit 10 --errors`)
+  pulse deploy myfunction.wasm --name my-function
+  pulse deploy transform.wasm --name transformer --version 2.0.0
+  pulse dev myfunction.wasm --name my-function
+  pulse functions list
+  pulse functions delete fn_123456789
+  pulse triggers list
+  pulse triggers create --function-id fn_123 --name my-trigger --event-type Transfer
+  pulse triggers delete trg_456789
+  pulse logs fn_123456789
+  pulse logs fn_123456789 --limit 10 --errors`)
 }
 
 func deployCmd(args []string) {
@@ -145,7 +145,7 @@ func deployCmd(args []string) {
 
 	if fs.NArg() < 1 {
 		fmt.Println("Error: WASM file path is required")
-		fmt.Println("Usage: mirador deploy <wasm-file> --name <name>")
+		fmt.Println("Usage: pulse deploy <wasm-file> --name <name>")
 		os.Exit(1)
 	}
 
@@ -242,13 +242,13 @@ func functionsCmd(subCmd string, args []string) {
 		listFunctions()
 	case "get":
 		if len(args) < 1 {
-			fmt.Println("Usage: mirador functions get <id>")
+			fmt.Println("Usage: pulse functions get <id>")
 			os.Exit(1)
 		}
 		getFunction(args[0])
 	case "delete":
 		if len(args) < 1 {
-			fmt.Println("Usage: mirador functions delete <id>")
+			fmt.Println("Usage: pulse functions delete <id>")
 			os.Exit(1)
 		}
 		deleteFunction(args[0])
@@ -291,7 +291,7 @@ func listFunctions() {
 
 	if result.Count == 0 {
 		fmt.Println("No functions deployed yet.")
-		fmt.Println("\nDeploy a function with: mirador deploy <wasm-file> --name <name>")
+		fmt.Println("\nDeploy a function with: pulse deploy <wasm-file> --name <name>")
 		return
 	}
 
@@ -396,13 +396,13 @@ func triggersCmd(subCmd string, args []string) {
 		createTrigger(args)
 	case "get":
 		if len(args) < 1 {
-			fmt.Println("Usage: mirador triggers get <id>")
+			fmt.Println("Usage: pulse triggers get <id>")
 			os.Exit(1)
 		}
 		getTrigger(args[0])
 	case "delete":
 		if len(args) < 1 {
-			fmt.Println("Usage: mirador triggers delete <id>")
+			fmt.Println("Usage: pulse triggers delete <id>")
 			os.Exit(1)
 		}
 		deleteTrigger(args[0])
@@ -446,7 +446,7 @@ func listTriggers() {
 
 	if result.Count == 0 {
 		fmt.Println("No triggers configured yet.")
-		fmt.Println("\nCreate a trigger with: mirador triggers create --function-id <id> --name <name> --event-type <type>")
+		fmt.Println("\nCreate a trigger with: pulse triggers create --function-id <id> --name <name> --event-type <type>")
 		return
 	}
 
@@ -784,7 +784,7 @@ func devCmd(args []string) {
 
 	if fs.NArg() < 1 {
 		fmt.Println("Error: WASM file path is required")
-		fmt.Println("Usage: mirador dev <wasm-file> [--name <name>] [--interval <seconds>]")
+		fmt.Println("Usage: pulse dev <wasm-file> [--name <name>] [--interval <seconds>]")
 		os.Exit(1)
 	}
 

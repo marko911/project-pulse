@@ -19,8 +19,8 @@ import (
 
 	"github.com/twmb/franz-go/pkg/kgo"
 
-	"github.com/mirador/pulse/internal/adapter"
-	"github.com/mirador/pulse/internal/processor"
+	"github.com/marko911/project-pulse/internal/adapter"
+	"github.com/marko911/project-pulse/internal/processor"
 )
 
 func main() {

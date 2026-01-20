@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
-	"github.com/mirador/pulse/internal/adapter"
+	"github.com/marko911/project-pulse/internal/adapter"
 )
 
 // Adapter implements the Solana blockchain adapter using WebSockets.

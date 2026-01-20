@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	protov1 "github.com/mirador/pulse/pkg/proto/v1"
+	protov1 "github.com/marko911/project-pulse/pkg/proto/v1"
 )
 
 func TestVerify_MatchingBlocks(t *testing.T) {

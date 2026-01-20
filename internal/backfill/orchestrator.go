@@ -11,7 +11,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/twmb/franz-go/pkg/kgo"
 
-	protov1 "github.com/mirador/pulse/pkg/proto/v1"
+	protov1 "github.com/marko911/project-pulse/pkg/proto/v1"
 )
 
 // OrchestratorConfig configures the backfill orchestrator.

@@ -20,7 +20,7 @@ type TopicConfig struct {
 	CleanupPolicy     string
 }
 
-// DefaultTopicConfigs returns the default topic configurations for Mirador.
+// DefaultTopicConfigs returns the default topic configurations for Pulse.
 func DefaultTopicConfigs() []TopicConfig {
 	return []TopicConfig{
 		{

@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mirador/pulse/internal/platform/goldensource"
-	protov1 "github.com/mirador/pulse/pkg/proto/v1"
+	"github.com/marko911/project-pulse/internal/platform/goldensource"
+	protov1 "github.com/marko911/project-pulse/pkg/proto/v1"
 )
 
 func TestDefaultReconcilerConfig(t *testing.T) {

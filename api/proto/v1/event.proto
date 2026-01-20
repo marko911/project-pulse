@@ -1,8 +1,8 @@
 syntax = "proto3";
 
-package mirador.v1;
+package pulse.v1;
 
-option go_package = "github.com/mirador/pulse/pkg/proto/v1;protov1";
+option go_package = "github.com/marko911/project-pulse/pkg/proto/v1;protov1";
 
 import "google/protobuf/timestamp.proto";
 import "google/protobuf/any.proto";
@@ -81,7 +81,7 @@ message CanonicalEvent {
   // Schema version for evolution tracking
   uint32 schema_version = 14;
 
-  // Ingestion timestamp (when Mirador received this event)
+  // Ingestion timestamp (when Pulse received this event)
   google.protobuf.Timestamp ingested_at = 15;
 
   // Optional: reference to replaced event_id (for REPLACE actions)

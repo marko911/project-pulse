@@ -23,7 +23,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/mirador/pulse/internal/backfill"
+	"github.com/marko911/project-pulse/internal/backfill"
 )
 
 func main() {

@@ -12,7 +12,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 
-	"github.com/mirador/pulse/internal/adapter"
+	"github.com/marko911/project-pulse/internal/adapter"
 )
 
 // BlockSubscriber manages block and log subscriptions.

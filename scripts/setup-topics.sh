@@ -1,5 +1,5 @@
 #!/bin/bash
-# Setup Kafka/Redpanda topics for Mirador
+# Setup Kafka/Redpanda topics for Pulse
 #
 # Usage: ./setup-topics.sh [broker_addr]
 # Default broker: localhost:9092

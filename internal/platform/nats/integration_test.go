@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	pnats "github.com/mirador/pulse/internal/platform/nats"
+	pnats "github.com/marko911/project-pulse/internal/platform/nats"
 )
 
 // TestNATSIntegration tests NATS JetStream connectivity and basic operations.

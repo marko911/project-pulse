@@ -7,9 +7,9 @@ import (
 	"testing"
 	"time"
 
-	protov1 "github.com/mirador/pulse/pkg/proto/v1"
+	protov1 "github.com/marko911/project-pulse/pkg/proto/v1"
 
-	"github.com/mirador/pulse/internal/delivery/subscription"
+	"github.com/marko911/project-pulse/internal/delivery/subscription"
 )
 
 // mockSubscriptionManager implements subscription.Manager for testing.

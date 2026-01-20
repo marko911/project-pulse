@@ -1,7 +1,7 @@
 version: v2
 modules:
   - path: .
-    name: buf.build/mirador/mirador
+    name: buf.build/marko911/project-pulse
 lint:
   use:
     - DEFAULT

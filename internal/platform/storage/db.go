@@ -1,4 +1,4 @@
-// Package storage provides database access and repositories for the Mirador system.
+// Package storage provides database access and repositories for the Pulse system.
 package storage
 
 import (

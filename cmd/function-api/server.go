@@ -14,7 +14,7 @@ import (
 	"github.com/minio/minio-go/v7/pkg/credentials"
 	"github.com/redis/go-redis/v9"
 
-	"github.com/mirador/pulse/internal/platform/storage"
+	"github.com/marko911/project-pulse/internal/platform/storage"
 )
 
 // Server handles function API requests.

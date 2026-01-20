@@ -7,8 +7,8 @@ import (
 	"log/slog"
 	"sync"
 
-	"github.com/mirador/pulse/internal/adapter"
-	protov1 "github.com/mirador/pulse/pkg/proto/v1"
+	"github.com/marko911/project-pulse/internal/adapter"
+	protov1 "github.com/marko911/project-pulse/pkg/proto/v1"
 )
 
 // ReorgEvent represents a detected chain reorganization.

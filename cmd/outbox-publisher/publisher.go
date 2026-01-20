@@ -10,8 +10,8 @@ import (
 
 	"github.com/twmb/franz-go/pkg/kgo"
 
-	pnats "github.com/mirador/pulse/internal/platform/nats"
-	"github.com/mirador/pulse/internal/platform/storage"
+	pnats "github.com/marko911/project-pulse/internal/platform/nats"
+	"github.com/marko911/project-pulse/internal/platform/storage"
 )
 
 // PublisherConfig holds configuration for the outbox publisher.

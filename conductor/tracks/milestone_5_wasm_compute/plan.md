@@ -27,8 +27,8 @@
     - [ ] Subtask: Expose `DO` state accessors to WASM.
 
 ## Phase 4: Developer Experience (CLI & Deploy)
-- [ ] Task: Deployment CLI (`mirador`)
-    - [ ] Subtask: Implement `mirador deploy <function.wasm> <manifest.yaml>`.
+- [ ] Task: Deployment CLI (`pulse`)
+    - [ ] Subtask: Implement `pulse deploy <function.wasm> <manifest.yaml>`.
     - [ ] Subtask: Create API endpoint `POST /api/v1/functions` to receive uploads and store in MinIO.
 - [ ] Task: Function Registry
     - [ ] Subtask: Create database tables for `functions`, `triggers`, and `deployments`.

@@ -10,7 +10,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/mirador/pulse/internal/adapter"
+	"github.com/marko911/project-pulse/internal/adapter"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"

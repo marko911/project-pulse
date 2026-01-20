@@ -9,9 +9,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/mirador/pulse/internal/platform/goldensource"
-	"github.com/mirador/pulse/internal/platform/storage"
-	protov1 "github.com/mirador/pulse/pkg/proto/v1"
+	"github.com/marko911/project-pulse/internal/platform/goldensource"
+	"github.com/marko911/project-pulse/internal/platform/storage"
+	protov1 "github.com/marko911/project-pulse/pkg/proto/v1"
 )
 
 // ReconcilerConfig holds configuration for the reconciler.

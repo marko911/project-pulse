@@ -8,8 +8,8 @@ import (
 
 	"github.com/gorilla/websocket"
 
-	"github.com/mirador/pulse/internal/delivery/routing"
-	"github.com/mirador/pulse/internal/delivery/subscription"
+	"github.com/marko911/project-pulse/internal/delivery/routing"
+	"github.com/marko911/project-pulse/internal/delivery/subscription"
 )
 
 // Manager manages WebSocket connections and their subscriptions.

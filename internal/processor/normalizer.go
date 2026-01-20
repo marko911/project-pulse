@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/mirador/pulse/internal/adapter"
-	eventpb "github.com/mirador/pulse/pkg/proto/v1"
+	"github.com/marko911/project-pulse/internal/adapter"
+	eventpb "github.com/marko911/project-pulse/pkg/proto/v1"
 )
 
 // NormalizerRegistry holds normalizers for each supported chain.

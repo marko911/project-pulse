@@ -17,9 +17,9 @@ import (
 
 	"github.com/twmb/franz-go/pkg/kgo"
 
-	"github.com/mirador/pulse/internal/adapter"
-	"github.com/mirador/pulse/internal/adapter/solana"
-	"github.com/mirador/pulse/internal/adapter/solana_ws"
+	"github.com/marko911/project-pulse/internal/adapter"
+	"github.com/marko911/project-pulse/internal/adapter/solana"
+	"github.com/marko911/project-pulse/internal/adapter/solana_ws"
 )
 
 // AdapterInterface defines the common interface for Solana adapters

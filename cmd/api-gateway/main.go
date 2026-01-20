@@ -13,8 +13,8 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/mirador/pulse/internal/delivery/subscription"
-	protov1 "github.com/mirador/pulse/pkg/proto/v1"
+	"github.com/marko911/project-pulse/internal/delivery/subscription"
+	protov1 "github.com/marko911/project-pulse/pkg/proto/v1"
 )
 
 func main() {

@@ -12,7 +12,7 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/mirador/pulse/internal/adapter/evm"
+	"github.com/marko911/project-pulse/internal/adapter/evm"
 )
 
 func main() {

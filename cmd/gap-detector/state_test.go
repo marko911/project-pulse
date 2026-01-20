@@ -3,7 +3,7 @@ package main
 import (
 	"testing"
 
-	protov1 "github.com/mirador/pulse/pkg/proto/v1"
+	protov1 "github.com/marko911/project-pulse/pkg/proto/v1"
 )
 
 func TestChainState_FirstBlock(t *testing.T) {

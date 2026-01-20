@@ -1,4 +1,4 @@
-module github.com/mirador/pulse
+module github.com/marko911/project-pulse
 
 go 1.24.4
 

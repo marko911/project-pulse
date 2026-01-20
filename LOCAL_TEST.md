@@ -1,6 +1,6 @@
 # Local Platform Verification Guide
 
-This guide details the steps to verify the end-to-end functionality of the Mirador platform running locally with Docker Compose.
+This guide details the steps to verify the end-to-end functionality of the Pulse platform running locally with Docker Compose.
 
 **Goal:** Confirm that an event flows from ingestion (real Solana devnet) -> Trigger Router -> WASM Host -> Execution Log.
 
@@ -23,7 +23,7 @@ All services should show `healthy` or `running` status.
 ## 2. Build the CLI
 
 ```bash
-go build -o bin/mirador ./cmd/mirador
+go build -o bin/pulse ./cmd/pulse
 ```
 
 ## 3. Build and Deploy the Test Function
@@ -35,7 +35,7 @@ GOOS=wasip1 GOARCH=wasm go build -o hello.wasm .
 cd ../..
 
 # Deploy to the platform
-./bin/mirador deploy examples/hello-world/hello.wasm --name hello-world
+./bin/pulse deploy examples/hello-world/hello.wasm --name hello-world
 ```
 
 **Note the function ID returned** (e.g., `fn_1767510883808726320`).
@@ -45,7 +45,7 @@ cd ../..
 Use the CLI to create a trigger that invokes your function on Solana transactions:
 
 ```bash
-./bin/mirador triggers create \
+./bin/pulse triggers create \
   --function-id <function-id> \
   --name solana-watcher \
   --event-type transaction \
@@ -101,23 +101,23 @@ Check the wasm-host logs immediately after.
 
 ```bash
 # List all invocations for your function
-./bin/mirador logs <function-id>
+./bin/pulse logs <function-id>
 
 # Show only errors
-./bin/mirador logs <function-id> --errors
+./bin/pulse logs <function-id> --errors
 
 # Limit to recent entries
-./bin/mirador logs <function-id> --limit 5
+./bin/pulse logs <function-id> --limit 5
 ```
 
 ## 7. Verify Function Status
 
 ```bash
 # List all deployed functions
-./bin/mirador functions list
+./bin/pulse functions list
 
 # Get details for a specific function
-./bin/mirador functions get <function-id>
+./bin/pulse functions get <function-id>
 ```
 
 ## Troubleshooting
@@ -148,15 +148,15 @@ Check the wasm-host logs immediately after.
 docker exec pulse-minio mc ls local/wasm-modules/
 
 # Verify the function is registered
-./bin/mirador functions list
+./bin/pulse functions list
 ```
 
 ### Trigger not matching
 
 Verify the trigger configuration:
 ```bash
-./bin/mirador triggers list
-./bin/mirador triggers get <trigger-id>
+./bin/pulse triggers list
+./bin/pulse triggers get <trigger-id>
 ```
 
 Ensure `event_type` and `filter_chain` match the incoming events.

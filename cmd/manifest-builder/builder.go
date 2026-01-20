@@ -14,8 +14,8 @@ import (
 
 	"github.com/twmb/franz-go/pkg/kgo"
 
-	"github.com/mirador/pulse/internal/platform/storage"
-	protov1 "github.com/mirador/pulse/pkg/proto/v1"
+	"github.com/marko911/project-pulse/internal/platform/storage"
+	protov1 "github.com/marko911/project-pulse/pkg/proto/v1"
 )
 
 // BuilderConfig holds configuration for the manifest builder.

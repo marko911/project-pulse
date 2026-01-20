@@ -12,7 +12,7 @@ import (
 	"sort"
 	"time"
 
-	"github.com/mirador/pulse/internal/adapter"
+	"github.com/marko911/project-pulse/internal/adapter"
 )
 
 // Fixture represents the base fixture structure from fixture-recorder.

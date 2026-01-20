@@ -8,9 +8,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mirador/pulse/internal/adapter"
-	"github.com/mirador/pulse/internal/adapter/replay"
-	protov1 "github.com/mirador/pulse/pkg/proto/v1"
+	"github.com/marko911/project-pulse/internal/adapter"
+	"github.com/marko911/project-pulse/internal/adapter/replay"
+	protov1 "github.com/marko911/project-pulse/pkg/proto/v1"
 )
 
 // TestReorgDetection_Integration tests the full reorg detection pipeline
