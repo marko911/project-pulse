@@ -11,29 +11,23 @@ import (
 	protov1 "github.com/marko911/project-pulse/pkg/proto/v1"
 )
 
-// SolanaNormalizer converts Solana adapter events to canonical format.
 type SolanaNormalizer struct{}
 
-// NewSolanaNormalizer creates a new Solana normalizer.
 func NewSolanaNormalizer() *SolanaNormalizer {
 	return &SolanaNormalizer{}
 }
 
-// Chain returns the chain identifier.
 func (n *SolanaNormalizer) Chain() string {
 	return "solana"
 }
 
-// Normalize converts a Solana adapter event to canonical protobuf format.
 func (n *SolanaNormalizer) Normalize(ctx context.Context, event adapter.Event) (*protov1.CanonicalEvent, error) {
 	if event.Chain != "solana" {
 		return nil, fmt.Errorf("solana normalizer received non-solana event: %s", event.Chain)
 	}
 
-	// Generate deterministic event ID
 	eventID := n.generateEventID(event)
 
-	// Map commitment level
 	commitment := n.mapCommitmentLevel(event.CommitmentLevel)
 
 	return &protov1.CanonicalEvent{
@@ -57,7 +51,6 @@ func (n *SolanaNormalizer) Normalize(ctx context.Context, event adapter.Event) (
 	}, nil
 }
 
-// generateEventID creates a deterministic ID from event fields.
 func (n *SolanaNormalizer) generateEventID(event adapter.Event) string {
 	data := fmt.Sprintf("%s:%d:%s:%d:%d",
 		event.Chain,
@@ -67,10 +60,9 @@ func (n *SolanaNormalizer) generateEventID(event adapter.Event) string {
 		event.EventIndex,
 	)
 	hash := sha256.Sum256([]byte(data))
-	return hex.EncodeToString(hash[:16]) // Use first 16 bytes for shorter ID
+	return hex.EncodeToString(hash[:16])
 }
 
-// mapCommitmentLevel converts string commitment to protobuf enum.
 func (n *SolanaNormalizer) mapCommitmentLevel(level string) protov1.CommitmentLevel {
 	switch level {
 	case "processed":

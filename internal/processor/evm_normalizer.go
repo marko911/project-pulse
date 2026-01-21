@@ -11,35 +11,28 @@ import (
 	protov1 "github.com/marko911/project-pulse/pkg/proto/v1"
 )
 
-// EVMNormalizer converts EVM adapter events to canonical format.
 type EVMNormalizer struct {
 	chainID protov1.Chain
 }
 
-// NewEVMNormalizer creates a new EVM normalizer for the specified chain.
 func NewEVMNormalizer(chainName string) *EVMNormalizer {
 	return &EVMNormalizer{
 		chainID: mapEVMChain(chainName),
 	}
 }
 
-// Chain returns the chain identifier.
 func (n *EVMNormalizer) Chain() string {
 	return chainNameFromProto(n.chainID)
 }
 
-// Normalize converts an EVM adapter event to canonical protobuf format.
 func (n *EVMNormalizer) Normalize(ctx context.Context, event adapter.Event) (*protov1.CanonicalEvent, error) {
-	// Validate this is an EVM chain event
 	chainID := mapEVMChain(event.Chain)
 	if chainID == protov1.Chain_CHAIN_UNSPECIFIED || chainID == protov1.Chain_CHAIN_SOLANA {
 		return nil, fmt.Errorf("evm normalizer received non-evm event: %s", event.Chain)
 	}
 
-	// Generate deterministic event ID
 	eventID := n.generateEventID(event)
 
-	// Map commitment level (EVM uses different terminology)
 	commitment := n.mapCommitmentLevel(event.CommitmentLevel)
 
 	return &protov1.CanonicalEvent{
@@ -52,18 +45,17 @@ func (n *EVMNormalizer) Normalize(ctx context.Context, event adapter.Event) (*pr
 		TxIndex:         event.TxIndex,
 		EventIndex:      event.EventIndex,
 		EventType:       event.EventType,
-		Accounts:        event.Accounts, // Contract addresses involved
+		Accounts:        event.Accounts,
 		Timestamp:       time.Unix(event.Timestamp, 0),
-		Payload:         event.Payload, // ABI-encoded log data
+		Payload:         event.Payload,
 		ReorgAction:     protov1.ReorgAction_REORG_ACTION_NORMAL,
 		SchemaVersion:   1,
 		IngestedAt:      time.Now(),
-		ProgramId:       event.ProgramID, // Contract address for EVM
+		ProgramId:       event.ProgramID,
 		NativeValue:     event.NativeValue,
 	}, nil
 }
 
-// generateEventID creates a deterministic ID from event fields.
 func (n *EVMNormalizer) generateEventID(event adapter.Event) string {
 	data := fmt.Sprintf("%s:%d:%s:%d:%d",
 		event.Chain,
@@ -76,7 +68,6 @@ func (n *EVMNormalizer) generateEventID(event adapter.Event) string {
 	return hex.EncodeToString(hash[:16])
 }
 
-// mapCommitmentLevel converts EVM confirmation terminology to canonical.
 func (n *EVMNormalizer) mapCommitmentLevel(level string) protov1.CommitmentLevel {
 	switch level {
 	case "pending", "latest":
@@ -90,7 +81,6 @@ func (n *EVMNormalizer) mapCommitmentLevel(level string) protov1.CommitmentLevel
 	}
 }
 
-// mapEVMChain converts chain name to protobuf enum.
 func mapEVMChain(name string) protov1.Chain {
 	switch name {
 	case "ethereum", "eth", "mainnet":
@@ -112,7 +102,6 @@ func mapEVMChain(name string) protov1.Chain {
 	}
 }
 
-// chainNameFromProto converts protobuf enum to chain name.
 func chainNameFromProto(chain protov1.Chain) string {
 	switch chain {
 	case protov1.Chain_CHAIN_ETHEREUM:

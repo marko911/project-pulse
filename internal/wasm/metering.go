@@ -9,7 +9,6 @@ import (
 	"github.com/twmb/franz-go/pkg/kgo"
 )
 
-// BillingEvent represents a usage event for billing.
 type BillingEvent struct {
 	EventID     string    `json:"event_id"`
 	TenantID    string    `json:"tenant_id"`
@@ -22,20 +21,17 @@ type BillingEvent struct {
 	ErrorCode   string    `json:"error_code,omitempty"`
 }
 
-// MeteringConfig contains configuration for the metering publisher.
 type MeteringConfig struct {
 	BrokerEndpoint string
 	BillingTopic   string
 }
 
-// MeteringPublisher publishes billing events to Kafka.
 type MeteringPublisher struct {
 	cfg    MeteringConfig
 	client *kgo.Client
 	logger *slog.Logger
 }
 
-// NewMeteringPublisher creates a new metering publisher.
 func NewMeteringPublisher(cfg MeteringConfig, logger *slog.Logger) (*MeteringPublisher, error) {
 	client, err := kgo.NewClient(
 		kgo.SeedBrokers(cfg.BrokerEndpoint),
@@ -52,7 +48,6 @@ func NewMeteringPublisher(cfg MeteringConfig, logger *slog.Logger) (*MeteringPub
 	}, nil
 }
 
-// Publish emits a billing event to the billing-events topic.
 func (m *MeteringPublisher) Publish(ctx context.Context, result *InvocationResult) error {
 	event := BillingEvent{
 		EventID:     result.RequestID + "-billing",
@@ -66,7 +61,6 @@ func (m *MeteringPublisher) Publish(ctx context.Context, result *InvocationResul
 	}
 
 	if !result.Success && result.Error != "" {
-		// Extract error code from error message
 		event.ErrorCode = "EXECUTION_ERROR"
 		if len(result.Error) > 50 {
 			event.ErrorCode = result.Error[:50]
@@ -105,7 +99,6 @@ func (m *MeteringPublisher) Publish(ctx context.Context, result *InvocationResul
 	return nil
 }
 
-// PublishSync emits a billing event and waits for confirmation.
 func (m *MeteringPublisher) PublishSync(ctx context.Context, result *InvocationResult) error {
 	event := BillingEvent{
 		EventID:     result.RequestID + "-billing",
@@ -136,12 +129,10 @@ func (m *MeteringPublisher) PublishSync(ctx context.Context, result *InvocationR
 	return results.FirstErr()
 }
 
-// Flush ensures all pending events are sent.
 func (m *MeteringPublisher) Flush(ctx context.Context) error {
 	return m.client.Flush(ctx)
 }
 
-// Close shuts down the metering publisher.
 func (m *MeteringPublisher) Close() {
 	m.client.Close()
 }

@@ -1,7 +1,3 @@
-// Package main is the entrypoint for the EVM adapter service.
-// The EVM adapter connects to EVM-compatible chains (Ethereum, Polygon, Arbitrum, etc.)
-// via WebSocket or HTTP RPC, ingests blocks and events, normalizes them to the canonical
-// event format, and publishes them to the broker.
 package main
 
 import (
@@ -16,14 +12,12 @@ import (
 )
 
 func main() {
-	// Parse command line flags
 	configPath := flag.String("config", "", "path to configuration file")
 	chain := flag.String("chain", "ethereum", "chain to connect to (ethereum, polygon, arbitrum, optimism, base, avalanche, bsc)")
 	rpcURL := flag.String("rpc", "", "RPC endpoint URL (WebSocket or HTTP)")
 	logLevel := flag.String("log-level", "info", "log level (debug, info, warn, error)")
 	flag.Parse()
 
-	// Setup structured logging
 	level := parseLogLevel(*logLevel)
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: level}))
 	slog.SetDefault(logger)
@@ -33,21 +27,18 @@ func main() {
 		"config", *configPath,
 	)
 
-	// Load configuration
 	cfg, err := evm.LoadConfig(*configPath, *chain, *rpcURL)
 	if err != nil {
 		logger.Error("failed to load configuration", "error", err)
 		os.Exit(1)
 	}
 
-	// Create adapter
 	adapter, err := evm.NewAdapter(cfg, logger)
 	if err != nil {
 		logger.Error("failed to create adapter", "error", err)
 		os.Exit(1)
 	}
 
-	// Setup graceful shutdown
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -60,7 +51,6 @@ func main() {
 		cancel()
 	}()
 
-	// Run the adapter
 	if err := adapter.Run(ctx); err != nil {
 		logger.Error("adapter exited with error", "error", err)
 		os.Exit(1)

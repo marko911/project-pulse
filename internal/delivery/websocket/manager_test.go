@@ -14,7 +14,6 @@ import (
 func TestManager_RegisterAndGet(t *testing.T) {
 	manager := NewManager(ManagerConfig{})
 
-	// Create a test connection
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		conn, err := upgrader.Upgrade(w, r, nil)
 		if err != nil {
@@ -35,10 +34,8 @@ func TestManager_RegisterAndGet(t *testing.T) {
 	}
 	defer clientConn.Close()
 
-	// Give time for registration
 	time.Sleep(100 * time.Millisecond)
 
-	// Should be able to get the destination
 	dest, ok := manager.Get("client-1")
 	if !ok {
 		t.Error("expected to find destination 'client-1'")
@@ -63,15 +60,12 @@ func TestManager_Unregister(t *testing.T) {
 
 	time.Sleep(100 * time.Millisecond)
 
-	// Verify registered
 	if _, ok := manager.Get("client-unreg"); !ok {
 		t.Fatal("client should be registered")
 	}
 
-	// Unregister
 	manager.Unregister("client-unreg")
 
-	// Should not find it anymore
 	if _, ok := manager.Get("client-unreg"); ok {
 		t.Error("client should be unregistered")
 	}
@@ -91,7 +85,6 @@ func TestManager_All(t *testing.T) {
 	}))
 	defer server.Close()
 
-	// Create multiple connections
 	var clients []*websocket.Conn
 	for i := 0; i < connectionCount; i++ {
 		wsURL := "ws" + strings.TrimPrefix(server.URL, "http") + "?id=client-" + string(rune('a'+i))
@@ -104,12 +97,10 @@ func TestManager_All(t *testing.T) {
 		}
 	}()
 
-	// Wait for all connections
 	for i := 0; i < connectionCount; i++ {
 		<-ready
 	}
 
-	// Get all destinations
 	all := manager.All()
 	if len(all) != connectionCount {
 		t.Errorf("expected %d destinations, got %d", connectionCount, len(all))
@@ -189,24 +180,20 @@ func TestManager_ReplaceExistingConnection(t *testing.T) {
 
 	wsURL := "ws" + strings.TrimPrefix(server.URL, "http")
 
-	// First connection
 	conn1, _, _ := websocket.DefaultDialer.Dial(wsURL, nil)
 	defer conn1.Close()
 	<-connectionsDone
 
-	// Second connection with same ID should replace first
 	conn2, _, _ := websocket.DefaultDialer.Dial(wsURL, nil)
 	defer conn2.Close()
 	<-connectionsDone
 
 	time.Sleep(100 * time.Millisecond)
 
-	// First destination should be closed
 	if !firstDest.IsClosed() {
 		t.Error("first destination should be closed after replacement")
 	}
 
-	// Should still have exactly 1 active connection
 	if manager.ActiveCount() != 1 {
 		t.Errorf("expected 1 active connection after replacement, got %d", manager.ActiveCount())
 	}
@@ -228,13 +215,11 @@ func TestManager_Close(t *testing.T) {
 
 	time.Sleep(100 * time.Millisecond)
 
-	// Close manager
 	err := manager.Close()
 	if err != nil {
 		t.Fatalf("close error: %v", err)
 	}
 
-	// All connections should be closed
 	if !dest.IsClosed() {
 		t.Error("destination should be closed after manager.Close()")
 	}

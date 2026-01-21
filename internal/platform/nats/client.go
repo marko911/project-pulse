@@ -1,4 +1,3 @@
-// Package nats provides NATS JetStream client infrastructure for distributed event fanout.
 package nats
 
 import (
@@ -12,27 +11,24 @@ import (
 	"github.com/nats-io/nats.go/jetstream"
 )
 
-// Config holds NATS connection configuration.
 type Config struct {
-	URL            string        // NATS server URL (e.g., "nats://localhost:4222")
-	Name           string        // Client connection name for identification
-	ReconnectWait  time.Duration // Time to wait between reconnection attempts
-	MaxReconnects  int           // Maximum reconnection attempts (-1 for unlimited)
-	ConnectTimeout time.Duration // Initial connection timeout
+	URL            string
+	Name           string
+	ReconnectWait  time.Duration
+	MaxReconnects  int
+	ConnectTimeout time.Duration
 }
 
-// DefaultConfig returns sensible defaults for local development.
 func DefaultConfig() Config {
 	return Config{
 		URL:            "nats://localhost:4222",
 		Name:           "pulse-service",
 		ReconnectWait:  2 * time.Second,
-		MaxReconnects:  -1, // Unlimited
+		MaxReconnects:  -1,
 		ConnectTimeout: 10 * time.Second,
 	}
 }
 
-// Client wraps a NATS connection with JetStream support and lifecycle management.
 type Client struct {
 	nc  *nats.Conn
 	js  jetstream.JetStream
@@ -42,7 +38,6 @@ type Client struct {
 	closed bool
 }
 
-// Connect establishes a connection to NATS with JetStream enabled.
 func Connect(ctx context.Context, cfg Config) (*Client, error) {
 	opts := []nats.Option{
 		nats.Name(cfg.Name),
@@ -80,24 +75,20 @@ func Connect(ctx context.Context, cfg Config) (*Client, error) {
 	}, nil
 }
 
-// JetStream returns the JetStream context for stream operations.
 func (c *Client) JetStream() jetstream.JetStream {
 	return c.js
 }
 
-// Conn returns the underlying NATS connection.
 func (c *Client) Conn() *nats.Conn {
 	return c.nc
 }
 
-// IsConnected returns true if the client has an active connection.
 func (c *Client) IsConnected() bool {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	return !c.closed && c.nc.IsConnected()
 }
 
-// Close gracefully shuts down the NATS connection.
 func (c *Client) Close() error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -107,7 +98,6 @@ func (c *Client) Close() error {
 	}
 	c.closed = true
 
-	// Drain ensures in-flight messages are processed before closing
 	if err := c.nc.Drain(); err != nil {
 		c.nc.Close()
 		return fmt.Errorf("nats drain: %w", err)

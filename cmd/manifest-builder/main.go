@@ -1,5 +1,3 @@
-// Package main implements the Manifest Builder service.
-// This service aggregates finalized block data into correctness manifests.
 package main
 
 import (
@@ -16,21 +14,17 @@ import (
 )
 
 func main() {
-	// Configuration flags
 	var (
-		// Database configuration
 		dbHost     = flag.String("db-host", envOrDefault("DB_HOST", "localhost"), "Database host")
 		dbPort     = flag.Int("db-port", envOrDefaultInt("DB_PORT", 5432), "Database port")
 		dbUser     = flag.String("db-user", envOrDefault("DB_USER", "pulse"), "Database user")
 		dbPassword = flag.String("db-password", envOrDefault("DB_PASSWORD", "pulse_dev"), "Database password")
 		dbName     = flag.String("db-name", envOrDefault("DB_NAME", "pulse"), "Database name")
 
-		// Kafka configuration
 		brokers       = flag.String("brokers", envOrDefault("KAFKA_BROKERS", "localhost:9092"), "Kafka/Redpanda brokers (comma-separated)")
 		topics        = flag.String("topics", envOrDefault("TOPICS", "finalized-events"), "Topics to consume (comma-separated)")
 		consumerGroup = flag.String("group", envOrDefault("CONSUMER_GROUP", "manifest-builder"), "Consumer group ID")
 
-		// Service configuration
 		pollInterval   = flag.Duration("poll-interval", 100*time.Millisecond, "Polling interval")
 		flushInterval  = flag.Duration("flush-interval", 5*time.Second, "Interval to flush pending manifests")
 		metricsAddr    = flag.String("metrics-addr", envOrDefault("METRICS_ADDR", ":9091"), "Address for metrics endpoint")
@@ -38,7 +32,6 @@ func main() {
 	)
 	flag.Parse()
 
-	// Setup structured logging
 	var level slog.Level
 	switch *logLevel {
 	case "debug":
@@ -56,7 +49,6 @@ func main() {
 	}))
 	slog.SetDefault(logger)
 
-	// Parse topics and brokers
 	topicList := strings.Split(*topics, ",")
 	for i := range topicList {
 		topicList[i] = strings.TrimSpace(topicList[i])
@@ -75,7 +67,6 @@ func main() {
 		"metrics_addr", *metricsAddr,
 	)
 
-	// Create database connection
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -95,7 +86,6 @@ func main() {
 	}
 	defer db.Close()
 
-	// Run database migrations
 	if err := db.Migrate(ctx); err != nil {
 		slog.Error("failed to run database migrations", "error", err)
 		os.Exit(1)
@@ -103,7 +93,6 @@ func main() {
 
 	slog.Info("connected to database and applied migrations", "host", *dbHost, "database", *dbName)
 
-	// Create and run the builder
 	builder, err := NewBuilder(BuilderConfig{
 		Brokers:       brokerList,
 		Topics:        topicList,
@@ -117,7 +106,6 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Setup graceful shutdown
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 
@@ -127,13 +115,11 @@ func main() {
 		cancel()
 	}()
 
-	// Run the builder
 	if err := builder.Run(ctx); err != nil && ctx.Err() == nil {
 		slog.Error("builder error", "error", err)
 		os.Exit(1)
 	}
 
-	// Graceful shutdown
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer shutdownCancel()
 

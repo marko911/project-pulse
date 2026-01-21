@@ -14,24 +14,19 @@ import (
 	protov1 "github.com/marko911/project-pulse/pkg/proto/v1"
 )
 
-// Server holds API gateway dependencies.
 type Server struct {
 	cfg    Config
 	logger *slog.Logger
 
-	// Correctness components (injected or created lazily)
 	watermark   *correctness.WatermarkController
 	gapDetector *correctness.GapDetector
 	repo        *storage.ManifestRepository
 
-	// WebSocket handler for subscription management
 	wsHandler *WebSocketHandler
 
-	// Function API handler
 	functionAPI *FunctionAPI
 }
 
-// NewServer creates a new API gateway server.
 func NewServer(cfg Config, logger *slog.Logger) *Server {
 	return &Server{
 		cfg:    cfg,
@@ -39,67 +34,54 @@ func NewServer(cfg Config, logger *slog.Logger) *Server {
 	}
 }
 
-// SetWatermarkController sets the watermark controller for the API.
 func (s *Server) SetWatermarkController(w *correctness.WatermarkController) {
 	s.watermark = w
 }
 
-// SetGapDetector sets the gap detector for the API.
 func (s *Server) SetGapDetector(g *correctness.GapDetector) {
 	s.gapDetector = g
 }
 
-// SetManifestRepository sets the manifest repository for the API.
 func (s *Server) SetManifestRepository(r *storage.ManifestRepository) {
 	s.repo = r
 }
 
-// SetWebSocketHandler sets the WebSocket handler for subscription management.
 func (s *Server) SetWebSocketHandler(ws *WebSocketHandler) {
 	s.wsHandler = ws
 }
 
-// SetFunctionAPI sets the function API handler.
 func (s *Server) SetFunctionAPI(api *FunctionAPI) {
 	s.functionAPI = api
 }
 
-// Router returns the HTTP handler for the API gateway.
 func (s *Server) Router() http.Handler {
 	mux := http.NewServeMux()
 
-	// Health & status
 	mux.HandleFunc("/health", s.handleHealth)
 	mux.HandleFunc("/ready", s.handleReady)
 
-	// Correctness status endpoints
 	mux.HandleFunc("/api/v1/correctness/status", s.handleCorrectnessStatus)
 	mux.HandleFunc("/api/v1/correctness/watermark", s.handleWatermark)
 	mux.HandleFunc("/api/v1/correctness/halts", s.handleHalts)
 	mux.HandleFunc("/api/v1/correctness/gaps", s.handleGaps)
 
-	// Manifest endpoints
 	mux.HandleFunc("/api/v1/manifests/", s.handleManifests)
 	mux.HandleFunc("/api/v1/manifests/mismatches", s.handleMismatches)
 
-	// WebSocket endpoint for real-time event subscriptions
 	if s.wsHandler != nil {
 		mux.HandleFunc("/ws", s.wsHandler.HandleConnect)
 		mux.HandleFunc("/api/v1/ws", s.wsHandler.HandleConnect)
 	}
 
-	// Function registry endpoints
 	if s.functionAPI != nil {
 		s.functionAPI.RegisterRoutes(mux)
 	}
 
-	// Trigger management endpoints (standalone)
 	if s.functionAPI != nil {
 		mux.HandleFunc("/api/v1/triggers", s.functionAPI.handleTriggersRoot)
 		mux.HandleFunc("/api/v1/triggers/", s.functionAPI.handleTriggerByID)
 	}
 
-	// Profiling endpoints (pprof) for performance analysis
 	mux.HandleFunc("/debug/pprof/", pprof.Index)
 	mux.HandleFunc("/debug/pprof/cmdline", pprof.Cmdline)
 	mux.HandleFunc("/debug/pprof/profile", pprof.Profile)
@@ -111,16 +93,13 @@ func (s *Server) Router() http.Handler {
 	mux.Handle("/debug/pprof/mutex", pprof.Handler("mutex"))
 	mux.Handle("/debug/pprof/allocs", pprof.Handler("allocs"))
 
-	// Wrap with logging middleware
 	return s.loggingMiddleware(mux)
 }
 
-// loggingMiddleware logs all requests.
 func (s *Server) loggingMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
 
-		// Wrap response writer to capture status code
 		wrapped := &responseWriter{ResponseWriter: w, statusCode: http.StatusOK}
 
 		next.ServeHTTP(wrapped, r)
@@ -144,7 +123,6 @@ func (rw *responseWriter) WriteHeader(code int) {
 	rw.ResponseWriter.WriteHeader(code)
 }
 
-// handleHealth returns basic health status.
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -157,7 +135,6 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// handleReady returns readiness status based on correctness state.
 func (s *Server) handleReady(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -167,13 +144,11 @@ func (s *Server) handleReady(w http.ResponseWriter, r *http.Request) {
 	ready := true
 	reasons := []string{}
 
-	// Check watermark halt status
 	if s.watermark != nil && s.watermark.IsHalted() {
 		ready = false
 		reasons = append(reasons, "watermark_halted")
 	}
 
-	// Check gap detector halt status
 	if s.gapDetector != nil && s.gapDetector.IsHalted() {
 		ready = false
 		reasons = append(reasons, "gap_detector_halted")
@@ -193,7 +168,6 @@ func (s *Server) handleReady(w http.ResponseWriter, r *http.Request) {
 	s.writeJSON(w, http.StatusOK, status)
 }
 
-// handleCorrectnessStatus returns overall correctness system status.
 func (s *Server) handleCorrectnessStatus(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -204,14 +178,12 @@ func (s *Server) handleCorrectnessStatus(w http.ResponseWriter, r *http.Request)
 		"timestamp": time.Now().UTC().Format(time.RFC3339),
 	}
 
-	// Watermark status
 	if s.watermark != nil {
 		status["watermark"] = s.watermark.Stats()
 	} else {
 		status["watermark"] = map[string]interface{}{"available": false}
 	}
 
-	// Gap detector status
 	if s.gapDetector != nil {
 		status["gap_detector"] = s.gapDetector.Stats()
 	} else {
@@ -221,7 +193,6 @@ func (s *Server) handleCorrectnessStatus(w http.ResponseWriter, r *http.Request)
 	s.writeJSON(w, http.StatusOK, status)
 }
 
-// handleWatermark returns watermark state for chains.
 func (s *Server) handleWatermark(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -236,13 +207,11 @@ func (s *Server) handleWatermark(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Optional chain filter
 	chainParam := r.URL.Query().Get("chain")
 
 	stats := s.watermark.Stats()
 
 	if chainParam != "" {
-		// Filter to specific chain
 		chains := stats["chains"].(map[string]interface{})
 		if chainData, ok := chains[chainParam]; ok {
 			s.writeJSON(w, http.StatusOK, map[string]interface{}{
@@ -261,7 +230,6 @@ func (s *Server) handleWatermark(w http.ResponseWriter, r *http.Request) {
 	s.writeJSON(w, http.StatusOK, stats)
 }
 
-// handleHalts returns current halt conditions.
 func (s *Server) handleHalts(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
@@ -347,7 +315,6 @@ func (s *Server) resolveHalt(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// handleGaps returns gap detector information.
 func (s *Server) handleGaps(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -365,14 +332,12 @@ func (s *Server) handleGaps(w http.ResponseWriter, r *http.Request) {
 	s.writeJSON(w, http.StatusOK, s.gapDetector.Stats())
 }
 
-// handleManifests routes manifest requests.
 func (s *Server) handleManifests(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
 
-	// Parse path: /api/v1/manifests/{chain}/{block}
 	path := strings.TrimPrefix(r.URL.Path, "/api/v1/manifests/")
 	parts := strings.Split(path, "/")
 
@@ -401,7 +366,6 @@ func (s *Server) handleManifests(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// If block number specified, get specific manifest
 	if len(parts) >= 2 && parts[1] != "" {
 		blockNum, err := strconv.ParseUint(parts[1], 10, 64)
 		if err != nil {
@@ -416,7 +380,6 @@ func (s *Server) handleManifests(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Get range of manifests
 	s.getManifestRange(w, r, chain)
 }
 
@@ -443,12 +406,10 @@ func (s *Server) getManifest(w http.ResponseWriter, r *http.Request, chain proto
 }
 
 func (s *Server) getManifestRange(w http.ResponseWriter, r *http.Request, chain protov1.Chain) {
-	// Parse query params for range
 	fromStr := r.URL.Query().Get("from")
 	toStr := r.URL.Query().Get("to")
 	limitStr := r.URL.Query().Get("limit")
 
-	// Default limit
 	limit := 100
 	if limitStr != "" {
 		if l, err := strconv.Atoi(limitStr); err == nil && l > 0 && l <= 1000 {
@@ -456,7 +417,6 @@ func (s *Server) getManifestRange(w http.ResponseWriter, r *http.Request, chain 
 		}
 	}
 
-	// Get latest block if no range specified
 	if fromStr == "" && toStr == "" {
 		latest, err := s.repo.GetLatestBlock(r.Context(), chain)
 		if err != nil {
@@ -506,7 +466,6 @@ func (s *Server) getManifestRange(w http.ResponseWriter, r *http.Request, chain 
 		return
 	}
 
-	// Parse from/to
 	var fromBlock, toBlock uint64
 	var err error
 
@@ -532,7 +491,6 @@ func (s *Server) getManifestRange(w http.ResponseWriter, r *http.Request, chain 
 		toBlock = fromBlock + uint64(limit)
 	}
 
-	// Limit range
 	if toBlock-fromBlock > 1000 {
 		toBlock = fromBlock + 1000
 	}
@@ -560,7 +518,6 @@ func (s *Server) getManifestRange(w http.ResponseWriter, r *http.Request, chain 
 	})
 }
 
-// handleMismatches returns manifests with count mismatches.
 func (s *Server) handleMismatches(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -619,7 +576,6 @@ func (s *Server) handleMismatches(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// writeJSON writes a JSON response.
 func (s *Server) writeJSON(w http.ResponseWriter, status int, data interface{}) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
@@ -628,7 +584,6 @@ func (s *Server) writeJSON(w http.ResponseWriter, status int, data interface{}) 
 	}
 }
 
-// manifestToJSON converts a ManifestRecord to JSON-friendly map.
 func manifestToJSON(m *storage.ManifestRecord) map[string]interface{} {
 	return map[string]interface{}{
 		"id":                   m.ID,
@@ -648,7 +603,6 @@ func manifestToJSON(m *storage.ManifestRecord) map[string]interface{} {
 	}
 }
 
-// chainNameFromProto converts a protov1.Chain to a string name.
 func chainNameFromProto(chain protov1.Chain) string {
 	switch chain {
 	case protov1.Chain_CHAIN_ETHEREUM:
@@ -672,7 +626,6 @@ func chainNameFromProto(chain protov1.Chain) string {
 	}
 }
 
-// protoChainFromName converts a chain name string to protov1.Chain.
 func protoChainFromName(name string) protov1.Chain {
 	switch strings.ToLower(name) {
 	case "ethereum", "eth":
@@ -696,14 +649,11 @@ func protoChainFromName(name string) protov1.Chain {
 	}
 }
 
-// HandleNATSEvent routes a canonical event received from NATS to connected WebSocket clients.
-// This is called by the NATS consumer when events are received from JetStream.
 func (s *Server) HandleNATSEvent(event *protov1.CanonicalEvent) {
 	if s.wsHandler == nil {
 		return
 	}
 
-	// Log event receipt for debugging/monitoring
 	s.logger.Debug("received NATS event",
 		"event_id", event.EventId,
 		"chain", chainNameFromProto(event.Chain),
@@ -711,6 +661,5 @@ func (s *Server) HandleNATSEvent(event *protov1.CanonicalEvent) {
 		"block_number", event.BlockNumber,
 	)
 
-	// Route the event to subscribed WebSocket clients
 	s.wsHandler.RouteEvent(event)
 }

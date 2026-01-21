@@ -145,7 +145,6 @@ func TestOrchestrator_GetStats(t *testing.T) {
 
 	orch, _ := NewOrchestrator(cfg, nil)
 
-	// Simulate some activity
 	orch.mu.Lock()
 	orch.stats.GapsReceived = 10
 	orch.stats.BackfillsCreated = 10

@@ -1,13 +1,3 @@
-// Event Generator for Load Testing
-// Project Pulse - Milestone 4: Performance & WebSocket Scale
-//
-// Generates high-throughput canonical events and publishes them to NATS JetStream
-// for testing the WebSocket fanout system under realistic load conditions.
-//
-// Usage:
-//   go run . -rate 1000 -duration 60s                    # 1000 events/sec for 1 minute
-//   go run . -rate 10000 -duration 5m -nats nats://prod:4222
-//   go run . -rate 5000 -chains ethereum,solana -burst
 package main
 
 import (
@@ -28,21 +18,19 @@ import (
 	"github.com/nats-io/nats.go/jetstream"
 )
 
-// Config holds the generator configuration
 type Config struct {
 	NATSUrl      string
-	Rate         int           // Events per second
-	Duration     time.Duration // Total duration
-	Chains       []string      // Chains to generate events for
-	BurstMode    bool          // Enable burst mode (spiky traffic)
-	BurstRatio   float64       // Burst multiplier (e.g., 10x normal rate)
-	BurstPeriod  time.Duration // How often to burst
-	StreamName   string        // JetStream stream name
-	SubjectBase  string        // Subject prefix
-	WorkerCount  int           // Number of publisher goroutines
+	Rate         int
+	Duration     time.Duration
+	Chains       []string
+	BurstMode    bool
+	BurstRatio   float64
+	BurstPeriod  time.Duration
+	StreamName   string
+	SubjectBase  string
+	WorkerCount  int
 }
 
-// CanonicalEvent matches the proto definition
 type CanonicalEvent struct {
 	EventID         string    `json:"event_id"`
 	Chain           int       `json:"chain"`
@@ -60,7 +48,6 @@ type CanonicalEvent struct {
 	PublishedAt     time.Time `json:"published_at"`
 }
 
-// Chain enum values (matching proto)
 var chainValues = map[string]int{
 	"ethereum": 1,
 	"solana":   2,
@@ -72,7 +59,6 @@ var chainValues = map[string]int{
 	"avalanche": 8,
 }
 
-// Event types
 var eventTypes = []string{
 	"transfer",
 	"swap",
@@ -86,7 +72,6 @@ var eventTypes = []string{
 	"liquidation",
 }
 
-// Metrics
 type Metrics struct {
 	Published    atomic.Int64
 	Errors       atomic.Int64
@@ -103,7 +88,6 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	// Handle shutdown signals
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 	go func() {
@@ -151,7 +135,6 @@ func run(ctx context.Context, cfg Config, logger *slog.Logger) error {
 		"nats_url", cfg.NATSUrl,
 	)
 
-	// Connect to NATS
 	nc, err := nats.Connect(cfg.NATSUrl,
 		nats.Name("pulse-load-generator"),
 		nats.ReconnectWait(time.Second),
@@ -162,22 +145,19 @@ func run(ctx context.Context, cfg Config, logger *slog.Logger) error {
 	}
 	defer nc.Close()
 
-	// Get JetStream context
 	js, err := jetstream.New(nc)
 	if err != nil {
 		return fmt.Errorf("JetStream context failed: %w", err)
 	}
 
-	// Ensure stream exists (or get existing)
 	stream, err := js.Stream(ctx, cfg.StreamName)
 	if err != nil {
-		// Try to create stream
 		streamCfg := jetstream.StreamConfig{
 			Name:        cfg.StreamName,
 			Subjects:    []string{cfg.SubjectBase + ".>"},
 			Retention:   jetstream.LimitsPolicy,
 			MaxAge:      24 * time.Hour,
-			MaxBytes:    10 * 1024 * 1024 * 1024, // 10GB
+			MaxBytes:    10 * 1024 * 1024 * 1024,
 			Compression: jetstream.S2Compression,
 			Replicas:    1,
 		}
@@ -194,26 +174,20 @@ func run(ctx context.Context, cfg Config, logger *slog.Logger) error {
 		"subjects", info.Config.Subjects,
 	)
 
-	// Start metrics reporter
 	metrics := &Metrics{}
 	go reportMetrics(ctx, metrics, logger)
 
-	// Create event channel
 	eventCh := make(chan *CanonicalEvent, cfg.Rate*2)
 
-	// Start publisher workers
 	for i := 0; i < cfg.WorkerCount; i++ {
 		go publishWorker(ctx, js, cfg, eventCh, metrics, logger, i)
 	}
 
-	// Generate events
 	err = generateEvents(ctx, cfg, eventCh, metrics, logger)
 
-	// Wait for channel to drain
 	close(eventCh)
 	time.Sleep(time.Second)
 
-	// Final stats
 	logger.Info("generation complete",
 		"published", metrics.Published.Load(),
 		"errors", metrics.Errors.Load(),
@@ -247,7 +221,7 @@ func generateEvents(ctx context.Context, cfg Config, eventCh chan<- *CanonicalEv
 		case <-burstTicker.C:
 			if cfg.BurstMode && !inBurst {
 				inBurst = true
-				burstEndTime = time.Now().Add(5 * time.Second) // 5 second burst
+				burstEndTime = time.Now().Add(5 * time.Second)
 				logger.Info("burst started", "ratio", cfg.BurstRatio)
 			}
 
@@ -256,13 +230,11 @@ func generateEvents(ctx context.Context, cfg Config, eventCh chan<- *CanonicalEv
 				return nil
 			}
 
-			// Check if burst ended
 			if inBurst && time.Now().After(burstEndTime) {
 				inBurst = false
 				logger.Info("burst ended")
 			}
 
-			// Generate events (more during burst)
 			count := 1
 			if inBurst {
 				count = int(cfg.BurstRatio)
@@ -277,7 +249,6 @@ func generateEvents(ctx context.Context, cfg Config, eventCh chan<- *CanonicalEv
 				select {
 				case eventCh <- event:
 				default:
-					// Channel full, drop event
 					metrics.Errors.Add(1)
 				}
 			}
@@ -288,7 +259,6 @@ func generateEvents(ctx context.Context, cfg Config, eventCh chan<- *CanonicalEv
 func generateEvent(chain string, blockNum uint64) *CanonicalEvent {
 	now := time.Now()
 
-	// Generate accounts (2-5 random addresses)
 	numAccounts := 2 + rand.Intn(4)
 	accounts := make([]string, numAccounts)
 	for i := range accounts {
@@ -298,7 +268,7 @@ func generateEvent(chain string, blockNum uint64) *CanonicalEvent {
 	return &CanonicalEvent{
 		EventID:         fmt.Sprintf("evt_%d_%s", now.UnixNano(), randomHex(8)),
 		Chain:           chainValues[chain],
-		CommitmentLevel: 3, // FINALIZED
+		CommitmentLevel: 3,
 		BlockNumber:     blockNum,
 		BlockHash:       randomHex(64),
 		TxHash:          randomHex(64),
@@ -340,9 +310,8 @@ func publishWorker(ctx context.Context, js jetstream.JetStream, cfg Config, even
 		metrics.Published.Add(1)
 		metrics.BytesSent.Add(int64(len(data)))
 
-		// Update rolling average latency
 		current := metrics.AvgLatencyNs.Load()
-		newAvg := (current*9 + latency) / 10 // Simple rolling average
+		newAvg := (current*9 + latency) / 10
 		metrics.AvgLatencyNs.Store(newAvg)
 	}
 }

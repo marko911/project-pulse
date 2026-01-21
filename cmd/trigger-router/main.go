@@ -1,8 +1,3 @@
-// Command trigger-router routes canonical events to WASM function invocations.
-//
-// This service consumes canonical events, matches them against user-defined
-// triggers stored in Redis, and enqueues matching invocations to Kafka for
-// the wasm-host service to execute.
 package main
 
 import (
@@ -16,26 +11,22 @@ import (
 )
 
 func main() {
-	// Configuration flags
 	var (
 		brokers       = flag.String("brokers", envOrDefault("KAFKA_BROKERS", "localhost:9092"), "Kafka/Redpanda brokers (comma-separated)")
 		inputTopic    = flag.String("input-topic", envOrDefault("INPUT_TOPIC", "canonical-events"), "Topic to consume canonical events from")
 		outputTopic   = flag.String("output-topic", envOrDefault("OUTPUT_TOPIC", "function-invocations"), "Topic to publish function invocations to")
 		consumerGroup = flag.String("consumer-group", envOrDefault("CONSUMER_GROUP", "trigger-router"), "Kafka consumer group name")
 
-		// Redis configuration for trigger storage
 		redisAddr     = flag.String("redis-addr", envOrDefault("REDIS_ADDR", "localhost:6379"), "Redis server address")
 		redisPassword = flag.String("redis-password", envOrDefault("REDIS_PASSWORD", ""), "Redis password")
 		redisDB       = flag.Int("redis-db", envOrDefaultInt("REDIS_DB", 0), "Redis database number")
 		redisPrefix   = flag.String("redis-prefix", envOrDefault("REDIS_PREFIX", "triggers:"), "Redis key prefix for triggers")
 
-		// Processing configuration
 		workers  = flag.Int("workers", envOrDefaultInt("WORKER_COUNT", 4), "Number of processing workers")
 		logLevel = flag.String("log-level", envOrDefault("LOG_LEVEL", "info"), "Log level: debug, info, warn, error")
 	)
 	flag.Parse()
 
-	// Setup structured logging
 	var level slog.Level
 	switch *logLevel {
 	case "debug":
@@ -62,7 +53,6 @@ func main() {
 		"workers", *workers,
 	)
 
-	// Create router configuration
 	cfg := RouterConfig{
 		Brokers:       *brokers,
 		InputTopic:    *inputTopic,
@@ -75,11 +65,9 @@ func main() {
 		Workers:       *workers,
 	}
 
-	// Setup context with signal handling
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	// Handle shutdown signals
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 
@@ -89,7 +77,6 @@ func main() {
 		cancel()
 	}()
 
-	// Create and run the router
 	router, err := NewRouter(ctx, cfg)
 	if err != nil {
 		slog.Error("Failed to create router", "error", err)

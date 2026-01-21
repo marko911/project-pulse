@@ -124,9 +124,6 @@ func TestReconciler_Stats(t *testing.T) {
 	}
 }
 
-// Note: Tests for getActiveChains and reconcileCycle require a database connection.
-// Integration tests with a real database should be in a separate test file.
-
 func TestReconciler_FailClosedBehavior(t *testing.T) {
 	logger := slog.Default()
 	verifier := goldensource.NewVerifier(goldensource.DefaultVerifierConfig(), logger)
@@ -135,7 +132,6 @@ func TestReconciler_FailClosedBehavior(t *testing.T) {
 	cfg.FailClosed = true
 	r := NewReconciler(cfg, nil, verifier, logger)
 
-	// Simulate halt
 	r.mu.Lock()
 	r.halted = true
 	r.haltReason = "test mismatch"
@@ -148,7 +144,6 @@ func TestReconciler_FailClosedBehavior(t *testing.T) {
 		t.Errorf("expected 'test mismatch', got %s", r.HaltReason())
 	}
 
-	// Resolve
 	err := r.ResolveHalt("issue fixed")
 	if err != nil {
 		t.Errorf("failed to resolve: %v", err)
@@ -165,7 +160,7 @@ func TestReconciler_Shutdown(t *testing.T) {
 	verifier := goldensource.NewVerifier(goldensource.DefaultVerifierConfig(), logger)
 
 	cfg := DefaultReconcilerConfig()
-	cfg.MetricsAddr = "" // Disable metrics server for test
+	cfg.MetricsAddr = ""
 	r := NewReconciler(cfg, nil, verifier, logger)
 
 	err := r.Shutdown(ctx)

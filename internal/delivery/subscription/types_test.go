@@ -158,7 +158,7 @@ func TestFilter_Matches(t *testing.T) {
 			name: "combined filters partial match fails",
 			filter: Filter{
 				Chains:     []protov1.Chain{protov1.Chain_CHAIN_ETHEREUM},
-				EventTypes: []string{"swap"}, // doesn't match
+				EventTypes: []string{"swap"},
 			},
 			event: &protov1.CanonicalEvent{
 				Chain:     protov1.Chain_CHAIN_ETHEREUM,

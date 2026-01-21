@@ -18,7 +18,6 @@ import (
 	protov1 "github.com/marko911/project-pulse/pkg/proto/v1"
 )
 
-// BuilderConfig holds configuration for the manifest builder.
 type BuilderConfig struct {
 	Brokers       []string
 	Topics        []string
@@ -28,13 +27,11 @@ type BuilderConfig struct {
 	MetricsAddr   string
 }
 
-// blockKey uniquely identifies a block for aggregation.
 type blockKey struct {
 	chain       protov1.Chain
 	blockNumber uint64
 }
 
-// blockAggregator accumulates events for a single block.
 type blockAggregator struct {
 	chain          protov1.Chain
 	blockNumber    uint64
@@ -46,7 +43,6 @@ type blockAggregator struct {
 	lastUpdated    time.Time
 }
 
-// Builder aggregates finalized events into manifests.
 type Builder struct {
 	cfg    BuilderConfig
 	logger *slog.Logger
@@ -55,20 +51,16 @@ type Builder struct {
 
 	client *kgo.Client
 
-	// Block aggregation
 	mu          sync.RWMutex
 	aggregators map[blockKey]*blockAggregator
 
-	// Metrics
 	metricsServer     *http.Server
 	manifestsCreated  int64
 	eventsProcessed   int64
 	blocksAggregated  int64
 }
 
-// NewBuilder creates a new manifest builder.
 func NewBuilder(cfg BuilderConfig, db *storage.DB, logger *slog.Logger) (*Builder, error) {
-	// Create Kafka consumer
 	client, err := kgo.NewClient(
 		kgo.SeedBrokers(cfg.Brokers...),
 		kgo.ConsumerGroup(cfg.ConsumerGroup),
@@ -91,16 +83,13 @@ func NewBuilder(cfg BuilderConfig, db *storage.DB, logger *slog.Logger) (*Builde
 	}, nil
 }
 
-// Run starts the manifest builder loop.
 func (b *Builder) Run(ctx context.Context) error {
 	b.logger.Info("starting manifest builder")
 
-	// Start metrics server
 	if b.cfg.MetricsAddr != "" {
 		go b.startMetricsServer()
 	}
 
-	// Start flush ticker
 	flushTicker := time.NewTicker(b.cfg.FlushInterval)
 	defer flushTicker.Stop()
 
@@ -117,7 +106,6 @@ func (b *Builder) Run(ctx context.Context) error {
 		default:
 		}
 
-		// Poll for records
 		fetches := b.client.PollFetches(ctx)
 		if fetches.IsClientClosed() {
 			return fmt.Errorf("kafka client closed")
@@ -134,7 +122,6 @@ func (b *Builder) Run(ctx context.Context) error {
 			continue
 		}
 
-		// Process each record
 		fetches.EachRecord(func(record *kgo.Record) {
 			if err := b.processRecord(record); err != nil {
 				b.logger.Error("process record error",
@@ -145,21 +132,18 @@ func (b *Builder) Run(ctx context.Context) error {
 			}
 		})
 
-		// Commit offsets
 		if err := b.client.CommitUncommittedOffsets(ctx); err != nil {
 			b.logger.Error("commit error", "error", err)
 		}
 	}
 }
 
-// processRecord handles a single Kafka record.
 func (b *Builder) processRecord(record *kgo.Record) error {
 	var event protov1.CanonicalEvent
 	if err := json.Unmarshal(record.Value, &event); err != nil {
 		return fmt.Errorf("unmarshal event: %w", err)
 	}
 
-	// Only process finalized events
 	if event.CommitmentLevel != protov1.CommitmentLevel_COMMITMENT_LEVEL_FINALIZED {
 		return nil
 	}
@@ -175,7 +159,7 @@ func (b *Builder) processRecord(record *kgo.Record) error {
 			chain:          event.Chain,
 			blockNumber:    event.BlockNumber,
 			blockHash:      event.BlockHash,
-			parentHash:     "", // Will be set from block event
+			parentHash:     "",
 			blockTimestamp: event.Timestamp,
 			events:         make([]*protov1.CanonicalEvent, 0),
 			txSet:          make(map[string]bool),
@@ -184,7 +168,6 @@ func (b *Builder) processRecord(record *kgo.Record) error {
 		b.aggregators[key] = agg
 	}
 
-	// Add event to aggregator
 	eventCopy := event
 	agg.events = append(agg.events, &eventCopy)
 	agg.txSet[event.TxHash] = true
@@ -202,14 +185,11 @@ func (b *Builder) processRecord(record *kgo.Record) error {
 	return nil
 }
 
-// flushReadyManifests builds and persists manifests for blocks that are ready.
-// A block is ready if it hasn't received new events for a configurable period.
 func (b *Builder) flushReadyManifests(ctx context.Context) error {
 	b.mu.Lock()
 	readyBlocks := make([]*blockAggregator, 0)
 	readyKeys := make([]blockKey, 0)
 
-	// Find blocks that haven't been updated recently
 	cutoff := time.Now().Add(-b.cfg.FlushInterval)
 	for key, agg := range b.aggregators {
 		if agg.lastUpdated.Before(cutoff) && len(agg.events) > 0 {
@@ -218,7 +198,6 @@ func (b *Builder) flushReadyManifests(ctx context.Context) error {
 		}
 	}
 
-	// Remove ready blocks from aggregators
 	for _, key := range readyKeys {
 		delete(b.aggregators, key)
 	}
@@ -230,7 +209,6 @@ func (b *Builder) flushReadyManifests(ctx context.Context) error {
 
 	b.logger.Info("flushing manifests", "count", len(readyBlocks))
 
-	// Build and save manifests
 	for _, agg := range readyBlocks {
 		manifest := b.buildManifest(agg)
 
@@ -258,9 +236,7 @@ func (b *Builder) flushReadyManifests(ctx context.Context) error {
 	return nil
 }
 
-// buildManifest creates a manifest from an aggregator.
 func (b *Builder) buildManifest(agg *blockAggregator) *protov1.Manifest {
-	// Sort events deterministically for hash computation
 	sortedEvents := make([]*protov1.CanonicalEvent, len(agg.events))
 	copy(sortedEvents, agg.events)
 	sort.Slice(sortedEvents, func(i, j int) bool {
@@ -270,20 +246,17 @@ func (b *Builder) buildManifest(agg *blockAggregator) *protov1.Manifest {
 		return sortedEvents[i].EventIndex < sortedEvents[j].EventIndex
 	})
 
-	// Compute event IDs hash
 	eventIdsHash := b.computeEventIdsHash(sortedEvents)
 
-	// Extract parent hash from first event if available
 	parentHash := ""
-	// Parent hash would typically come from block metadata; for now use empty
 
 	return &protov1.Manifest{
 		Chain:              agg.chain,
 		BlockNumber:        agg.blockNumber,
 		BlockHash:          agg.blockHash,
 		ParentHash:         parentHash,
-		ExpectedTxCount:    uint32(len(agg.txSet)),     // Actual count from events
-		ExpectedEventCount: uint32(len(agg.events)),   // Actual count from events
+		ExpectedTxCount:    uint32(len(agg.txSet)),
+		ExpectedEventCount: uint32(len(agg.events)),
 		EmittedTxCount:     uint32(len(agg.txSet)),
 		EmittedEventCount:  uint32(len(agg.events)),
 		EventIdsHash:       eventIdsHash,
@@ -294,19 +267,17 @@ func (b *Builder) buildManifest(agg *blockAggregator) *protov1.Manifest {
 	}
 }
 
-// computeEventIdsHash computes a deterministic hash of all event IDs.
 func (b *Builder) computeEventIdsHash(events []*protov1.CanonicalEvent) string {
 	hasher := sha256.New()
 
 	for _, event := range events {
 		hasher.Write([]byte(event.EventId))
-		hasher.Write([]byte{0}) // Null separator
+		hasher.Write([]byte{0})
 	}
 
 	return "sha256:" + hex.EncodeToString(hasher.Sum(nil))
 }
 
-// startMetricsServer starts the HTTP metrics endpoint.
 func (b *Builder) startMetricsServer() {
 	mux := http.NewServeMux()
 
@@ -360,29 +331,24 @@ func (b *Builder) startMetricsServer() {
 	}
 }
 
-// Shutdown gracefully shuts down the builder.
 func (b *Builder) Shutdown(ctx context.Context) error {
 	b.logger.Info("shutting down manifest builder")
 
-	// Flush any remaining manifests
 	if err := b.flushAllManifests(ctx); err != nil {
 		b.logger.Error("final flush error", "error", err)
 	}
 
-	// Shutdown metrics server
 	if b.metricsServer != nil {
 		if err := b.metricsServer.Shutdown(ctx); err != nil {
 			b.logger.Error("metrics server shutdown error", "error", err)
 		}
 	}
 
-	// Close Kafka client
 	b.client.Close()
 
 	return nil
 }
 
-// flushAllManifests flushes all pending manifests regardless of age.
 func (b *Builder) flushAllManifests(ctx context.Context) error {
 	b.mu.Lock()
 	allBlocks := make([]*blockAggregator, 0, len(b.aggregators))

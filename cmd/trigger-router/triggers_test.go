@@ -129,7 +129,7 @@ func TestTriggerFilter_Matches(t *testing.T) {
 			name: "multiple filters partial match fails",
 			filter: TriggerFilter{
 				Chains:     []protov1.Chain{protov1.Chain_CHAIN_ETHEREUM},
-				EventTypes: []string{"Approval"}, // This doesn't match
+				EventTypes: []string{"Approval"},
 				Accounts:   []string{"0xabc"},
 			},
 			event: &protov1.CanonicalEvent{

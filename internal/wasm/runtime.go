@@ -11,43 +11,36 @@ import (
 	"github.com/bytecodealliance/wasmtime-go/v30"
 )
 
-// RuntimeConfig contains configuration for the WASM runtime.
 type RuntimeConfig struct {
 	MaxMemoryMB int
 	MaxCPUMs    int
 	CacheSize   int
 }
 
-// ExecutionResult contains the result of a WASM function execution.
 type ExecutionResult struct {
 	Output      []byte
 	DurationMs  int64
 	MemoryBytes int64
 }
 
-// CompiledModule represents a pre-compiled WASM module.
 type CompiledModule struct {
 	Module     *wasmtime.Module
 	CompiledAt time.Time
 }
 
-// Runtime manages WASM execution using wasmtime.
 type Runtime struct {
 	cfg    RuntimeConfig
 	engine *wasmtime.Engine
 	logger *slog.Logger
 
-	// Module cache
 	cacheMu sync.RWMutex
 	cache   map[string]*CompiledModule
 }
 
-// NewRuntime creates a new WASM runtime.
 func NewRuntime(cfg RuntimeConfig, logger *slog.Logger) (*Runtime, error) {
-	// Configure wasmtime engine
 	engineCfg := wasmtime.NewConfig()
-	engineCfg.SetEpochInterruption(true) // Enable epoch-based interruption for timeouts
-	engineCfg.SetConsumeFuel(false)      // Use epochs instead of fuel for simplicity
+	engineCfg.SetEpochInterruption(true)
+	engineCfg.SetConsumeFuel(false)
 
 	engine := wasmtime.NewEngineWithConfig(engineCfg)
 
@@ -59,9 +52,7 @@ func NewRuntime(cfg RuntimeConfig, logger *slog.Logger) (*Runtime, error) {
 	}, nil
 }
 
-// Compile compiles a WASM module from bytes.
 func (r *Runtime) Compile(moduleID string, wasmBytes []byte) (*CompiledModule, error) {
-	// Check cache first
 	r.cacheMu.RLock()
 	if cached, ok := r.cache[moduleID]; ok {
 		r.cacheMu.RUnlock()
@@ -69,7 +60,6 @@ func (r *Runtime) Compile(moduleID string, wasmBytes []byte) (*CompiledModule, e
 	}
 	r.cacheMu.RUnlock()
 
-	// Compile the module
 	module, err := wasmtime.NewModule(r.engine, wasmBytes)
 	if err != nil {
 		return nil, fmt.Errorf("failed to compile module: %w", err)
@@ -80,9 +70,7 @@ func (r *Runtime) Compile(moduleID string, wasmBytes []byte) (*CompiledModule, e
 		CompiledAt: time.Now(),
 	}
 
-	// Cache the compiled module
 	r.cacheMu.Lock()
-	// Evict oldest if cache is full
 	if len(r.cache) >= r.cfg.CacheSize {
 		var oldestKey string
 		var oldestTime time.Time
@@ -100,33 +88,26 @@ func (r *Runtime) Compile(moduleID string, wasmBytes []byte) (*CompiledModule, e
 	return compiled, nil
 }
 
-// Execute runs a compiled WASM module with the given input.
 func (r *Runtime) Execute(ctx context.Context, module *CompiledModule, input []byte, hostFuncs *HostFunctions) (*ExecutionResult, error) {
 	startTime := time.Now()
 
-	// Create a new store for this execution
 	store := wasmtime.NewStore(r.engine)
 	defer store.Close()
 
-	// Configure memory limits
 	store.Limiter(
-		int64(r.cfg.MaxMemoryMB*1024*1024), // Max memory in bytes
-		-1,                                  // No table limit
-		1,                                   // Max instances
-		1,                                   // Max tables
-		1,                                   // Max memories
+		int64(r.cfg.MaxMemoryMB*1024*1024),
+		-1,
+		1,
+		1,
+		1,
 	)
 
-	// Set epoch deadline for CPU time limiting
 	store.SetEpochDeadline(1)
 
-	// Set input data on host functions so WASM can retrieve it
 	hostFuncs.SetInput(input)
 
-	// Create linker and add WASI + host functions
 	linker := wasmtime.NewLinker(r.engine)
 
-	// Add WASI support for Go's wasip1 target
 	wasiConfig := wasmtime.NewWasiConfig()
 	wasiConfig.InheritEnv()
 	store.SetWasi(wasiConfig)
@@ -138,13 +119,11 @@ func (r *Runtime) Execute(ctx context.Context, module *CompiledModule, input []b
 		return nil, fmt.Errorf("failed to add host functions: %w", err)
 	}
 
-	// Instantiate the module
 	instance, err := linker.Instantiate(store, module.Module)
 	if err != nil {
 		return nil, fmt.Errorf("failed to instantiate module: %w", err)
 	}
 
-	// Get the main function
 	mainFunc := instance.GetFunc(store, "_start")
 	if mainFunc == nil {
 		mainFunc = instance.GetFunc(store, "main")
@@ -153,37 +132,29 @@ func (r *Runtime) Execute(ctx context.Context, module *CompiledModule, input []b
 		return nil, fmt.Errorf("no _start or main function found")
 	}
 
-	// Get memory export for later use
 	memory := instance.GetExport(store, "memory")
 
-	// Start epoch incrementer for timeout enforcement
 	done := make(chan struct{})
 	go r.epochIncrementer(ctx, store, done)
 
-	// Execute the function
 	_, err = mainFunc.Call(store)
 	close(done)
 
 	duration := time.Since(startTime)
 
 	if err != nil {
-		// Check if it was a timeout
 		if trap, ok := err.(*wasmtime.Trap); ok {
 			if trap.Code() != nil && *trap.Code() == wasmtime.Interrupt {
 				return nil, fmt.Errorf("execution timeout exceeded %dms", r.cfg.MaxCPUMs)
 			}
 		}
-		// WASI programs exit with proc_exit(0) which triggers a trap
-		// Check if this is a successful exit (exit status 0)
 		errStr := err.Error()
 		if strings.Contains(errStr, "exit status 0") {
-			// This is a successful exit, not an error
 		} else {
 			return nil, fmt.Errorf("execution failed: %w", err)
 		}
 	}
 
-	// Get memory usage
 	var memoryBytes int64
 	if memory != nil && memory.Memory() != nil {
 		memoryBytes = int64(memory.Memory().DataSize(store))
@@ -196,9 +167,7 @@ func (r *Runtime) Execute(ctx context.Context, module *CompiledModule, input []b
 	}, nil
 }
 
-// epochIncrementer increments the epoch periodically to enforce CPU time limits.
 func (r *Runtime) epochIncrementer(ctx context.Context, store *wasmtime.Store, done <-chan struct{}) {
-	// Calculate tick interval based on max CPU time
 	tickInterval := time.Duration(r.cfg.MaxCPUMs) * time.Millisecond / 10
 	if tickInterval < time.Millisecond {
 		tickInterval = time.Millisecond
@@ -208,7 +177,7 @@ func (r *Runtime) epochIncrementer(ctx context.Context, store *wasmtime.Store, d
 	defer ticker.Stop()
 
 	epochCount := 0
-	maxEpochs := 10 // We'll interrupt after 10 epochs
+	maxEpochs := 10
 
 	for {
 		select {
@@ -221,7 +190,6 @@ func (r *Runtime) epochIncrementer(ctx context.Context, store *wasmtime.Store, d
 		case <-done:
 			return
 		case <-ctx.Done():
-			// Force interrupt on context cancellation
 			for i := 0; i < maxEpochs; i++ {
 				r.engine.IncrementEpoch()
 			}
@@ -230,14 +198,12 @@ func (r *Runtime) epochIncrementer(ctx context.Context, store *wasmtime.Store, d
 	}
 }
 
-// addHostFunctions adds host SDK functions to the linker.
 func (r *Runtime) addHostFunctions(ctx context.Context, linker *wasmtime.Linker, store *wasmtime.Store, hostFuncs *HostFunctions) error {
-	// Add log function: log(level i32, ptr i32, len i32)
 	logFuncType := wasmtime.NewFuncType(
 		[]*wasmtime.ValType{
-			wasmtime.NewValType(wasmtime.KindI32), // level
-			wasmtime.NewValType(wasmtime.KindI32), // ptr
-			wasmtime.NewValType(wasmtime.KindI32), // len
+			wasmtime.NewValType(wasmtime.KindI32),
+			wasmtime.NewValType(wasmtime.KindI32),
+			wasmtime.NewValType(wasmtime.KindI32),
 		},
 		[]*wasmtime.ValType{},
 	)
@@ -266,11 +232,10 @@ func (r *Runtime) addHostFunctions(ctx context.Context, linker *wasmtime.Linker,
 		return err
 	}
 
-	// Add output function: output(ptr i32, len i32)
 	outputFuncType := wasmtime.NewFuncType(
 		[]*wasmtime.ValType{
-			wasmtime.NewValType(wasmtime.KindI32), // ptr
-			wasmtime.NewValType(wasmtime.KindI32), // len
+			wasmtime.NewValType(wasmtime.KindI32),
+			wasmtime.NewValType(wasmtime.KindI32),
 		},
 		[]*wasmtime.ValType{},
 	)
@@ -297,11 +262,9 @@ func (r *Runtime) addHostFunctions(ctx context.Context, linker *wasmtime.Linker,
 		return err
 	}
 
-	// Add get_input_len function: get_input_len() -> i32
-	// Returns the length of the input data in bytes
 	getInputLenFuncType := wasmtime.NewFuncType(
 		[]*wasmtime.ValType{},
-		[]*wasmtime.ValType{wasmtime.NewValType(wasmtime.KindI32)}, // length
+		[]*wasmtime.ValType{wasmtime.NewValType(wasmtime.KindI32)},
 	)
 
 	getInputLenFunc := wasmtime.NewFunc(store, getInputLenFuncType, func(caller *wasmtime.Caller, args []wasmtime.Val) ([]wasmtime.Val, *wasmtime.Trap) {
@@ -312,15 +275,12 @@ func (r *Runtime) addHostFunctions(ctx context.Context, linker *wasmtime.Linker,
 		return err
 	}
 
-	// Add get_input function: get_input(ptr i32, len i32) -> i32
-	// Copies input data to the specified memory location
-	// Returns: number of bytes copied, or -1 on error
 	getInputFuncType := wasmtime.NewFuncType(
 		[]*wasmtime.ValType{
-			wasmtime.NewValType(wasmtime.KindI32), // ptr (destination in WASM memory)
-			wasmtime.NewValType(wasmtime.KindI32), // len (max bytes to copy)
+			wasmtime.NewValType(wasmtime.KindI32),
+			wasmtime.NewValType(wasmtime.KindI32),
 		},
-		[]*wasmtime.ValType{wasmtime.NewValType(wasmtime.KindI32)}, // bytes copied
+		[]*wasmtime.ValType{wasmtime.NewValType(wasmtime.KindI32)},
 	)
 
 	getInputFunc := wasmtime.NewFunc(store, getInputFuncType, func(caller *wasmtime.Caller, args []wasmtime.Val) ([]wasmtime.Val, *wasmtime.Trap) {
@@ -351,15 +311,14 @@ func (r *Runtime) addHostFunctions(ctx context.Context, linker *wasmtime.Linker,
 		return err
 	}
 
-	// Add kv_get function: kv_get(key_ptr i32, key_len i32, out_ptr i32, out_len_ptr i32) -> i32 (0 = success, -1 = not found, -2 = error)
 	kvGetFuncType := wasmtime.NewFuncType(
 		[]*wasmtime.ValType{
-			wasmtime.NewValType(wasmtime.KindI32), // key_ptr
-			wasmtime.NewValType(wasmtime.KindI32), // key_len
-			wasmtime.NewValType(wasmtime.KindI32), // out_ptr
-			wasmtime.NewValType(wasmtime.KindI32), // out_len_ptr
+			wasmtime.NewValType(wasmtime.KindI32),
+			wasmtime.NewValType(wasmtime.KindI32),
+			wasmtime.NewValType(wasmtime.KindI32),
+			wasmtime.NewValType(wasmtime.KindI32),
 		},
-		[]*wasmtime.ValType{wasmtime.NewValType(wasmtime.KindI32)}, // result
+		[]*wasmtime.ValType{wasmtime.NewValType(wasmtime.KindI32)},
 	)
 
 	kvGetFunc := wasmtime.NewFunc(store, kvGetFuncType, func(caller *wasmtime.Caller, args []wasmtime.Val) ([]wasmtime.Val, *wasmtime.Trap) {
@@ -387,7 +346,6 @@ func (r *Runtime) addHostFunctions(ctx context.Context, linker *wasmtime.Linker,
 			return []wasmtime.Val{wasmtime.ValI32(-1)}, nil
 		}
 
-		// Write value length to out_len_ptr
 		if int(outLenPtr)+4 > len(data) {
 			return []wasmtime.Val{wasmtime.ValI32(-2)}, nil
 		}
@@ -397,7 +355,6 @@ func (r *Runtime) addHostFunctions(ctx context.Context, linker *wasmtime.Linker,
 		data[outLenPtr+2] = byte(valLen >> 16)
 		data[outLenPtr+3] = byte(valLen >> 24)
 
-		// Write value to out_ptr
 		if int(outPtr)+len(val) > len(data) {
 			return []wasmtime.Val{wasmtime.ValI32(-2)}, nil
 		}
@@ -410,15 +367,14 @@ func (r *Runtime) addHostFunctions(ctx context.Context, linker *wasmtime.Linker,
 		return err
 	}
 
-	// Add kv_set function: kv_set(key_ptr i32, key_len i32, val_ptr i32, val_len i32) -> i32 (0 = success, -1 = error)
 	kvSetFuncType := wasmtime.NewFuncType(
 		[]*wasmtime.ValType{
-			wasmtime.NewValType(wasmtime.KindI32), // key_ptr
-			wasmtime.NewValType(wasmtime.KindI32), // key_len
-			wasmtime.NewValType(wasmtime.KindI32), // val_ptr
-			wasmtime.NewValType(wasmtime.KindI32), // val_len
+			wasmtime.NewValType(wasmtime.KindI32),
+			wasmtime.NewValType(wasmtime.KindI32),
+			wasmtime.NewValType(wasmtime.KindI32),
+			wasmtime.NewValType(wasmtime.KindI32),
 		},
-		[]*wasmtime.ValType{wasmtime.NewValType(wasmtime.KindI32)}, // result
+		[]*wasmtime.ValType{wasmtime.NewValType(wasmtime.KindI32)},
 	)
 
 	kvSetFunc := wasmtime.NewFunc(store, kvSetFuncType, func(caller *wasmtime.Caller, args []wasmtime.Val) ([]wasmtime.Val, *wasmtime.Trap) {
@@ -452,13 +408,12 @@ func (r *Runtime) addHostFunctions(ctx context.Context, linker *wasmtime.Linker,
 		return err
 	}
 
-	// Add kv_delete function: kv_delete(key_ptr i32, key_len i32) -> i32 (0 = success, -1 = error)
 	kvDeleteFuncType := wasmtime.NewFuncType(
 		[]*wasmtime.ValType{
-			wasmtime.NewValType(wasmtime.KindI32), // key_ptr
-			wasmtime.NewValType(wasmtime.KindI32), // key_len
+			wasmtime.NewValType(wasmtime.KindI32),
+			wasmtime.NewValType(wasmtime.KindI32),
 		},
-		[]*wasmtime.ValType{wasmtime.NewValType(wasmtime.KindI32)}, // result
+		[]*wasmtime.ValType{wasmtime.NewValType(wasmtime.KindI32)},
 	)
 
 	kvDeleteFunc := wasmtime.NewFunc(store, kvDeleteFuncType, func(caller *wasmtime.Caller, args []wasmtime.Val) ([]wasmtime.Val, *wasmtime.Trap) {
@@ -491,7 +446,6 @@ func (r *Runtime) addHostFunctions(ctx context.Context, linker *wasmtime.Linker,
 	return nil
 }
 
-// Close cleans up the runtime resources.
 func (r *Runtime) Close() {
 	r.cacheMu.Lock()
 	r.cache = make(map[string]*CompiledModule)

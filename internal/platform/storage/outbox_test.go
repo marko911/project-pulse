@@ -9,7 +9,6 @@ import (
 )
 
 func TestOutboxRepository_SaveEventWithOutbox(t *testing.T) {
-	// Skip if no database available
 	if testing.Short() {
 		t.Skip("Skipping integration test in short mode")
 	}
@@ -23,14 +22,12 @@ func TestOutboxRepository_SaveEventWithOutbox(t *testing.T) {
 	}
 	defer db.Close()
 
-	// Run migrations
 	if err := db.Migrate(ctx); err != nil {
 		t.Fatalf("Migrate failed: %v", err)
 	}
 
 	repo := NewOutboxRepository(db)
 
-	// Create a test event
 	event := &protov1.CanonicalEvent{
 		EventId:         "test-event-001",
 		Chain:           protov1.Chain_CHAIN_SOLANA,
@@ -48,13 +45,11 @@ func TestOutboxRepository_SaveEventWithOutbox(t *testing.T) {
 		SchemaVersion:   1,
 	}
 
-	// Save the event with outbox
 	err = repo.SaveEventWithOutbox(ctx, event, "test-topic")
 	if err != nil {
 		t.Fatalf("SaveEventWithOutbox failed: %v", err)
 	}
 
-	// Verify the event was saved
 	saved, err := repo.GetEventByID(ctx, event.EventId)
 	if err != nil {
 		t.Fatalf("GetEventByID failed: %v", err)
@@ -66,7 +61,6 @@ func TestOutboxRepository_SaveEventWithOutbox(t *testing.T) {
 		t.Errorf("Expected event ID %s, got %s", event.EventId, saved.EventID)
 	}
 
-	// Verify the outbox message was created
 	pending, err := repo.FetchPendingMessages(ctx, 10)
 	if err != nil {
 		t.Fatalf("FetchPendingMessages failed: %v", err)
@@ -110,7 +104,6 @@ func TestOutboxRepository_MarkAsPublished(t *testing.T) {
 
 	repo := NewOutboxRepository(db)
 
-	// Create and save a test event
 	event := &protov1.CanonicalEvent{
 		EventId:         "test-event-002-" + time.Now().Format(time.RFC3339Nano),
 		Chain:           protov1.Chain_CHAIN_ETHEREUM,
@@ -129,7 +122,6 @@ func TestOutboxRepository_MarkAsPublished(t *testing.T) {
 		t.Fatalf("SaveEventWithOutbox failed: %v", err)
 	}
 
-	// Fetch pending and mark as processing
 	pending, err := repo.FetchPendingMessages(ctx, 100)
 	if err != nil {
 		t.Fatalf("FetchPendingMessages failed: %v", err)
@@ -147,7 +139,6 @@ func TestOutboxRepository_MarkAsPublished(t *testing.T) {
 		t.Fatal("Target message not found in pending")
 	}
 
-	// Mark as processing
 	claimed, err := repo.MarkAsProcessing(ctx, []int64{targetID})
 	if err != nil {
 		t.Fatalf("MarkAsProcessing failed: %v", err)
@@ -156,12 +147,10 @@ func TestOutboxRepository_MarkAsPublished(t *testing.T) {
 		t.Errorf("Expected to claim [%d], got %v", targetID, claimed)
 	}
 
-	// Mark as published
 	if err := repo.MarkAsPublished(ctx, []int64{targetID}); err != nil {
 		t.Fatalf("MarkAsPublished failed: %v", err)
 	}
 
-	// Verify it's no longer pending
 	pending, err = repo.FetchPendingMessages(ctx, 100)
 	if err != nil {
 		t.Fatalf("FetchPendingMessages failed: %v", err)

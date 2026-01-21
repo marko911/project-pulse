@@ -8,8 +8,6 @@ import (
 	"unsafe"
 )
 
-// Import host functions from the "env" module
-//
 //go:wasmimport env log
 func hostLog(level int32, ptr unsafe.Pointer, len int32)
 
@@ -22,19 +20,16 @@ func hostGetInputLen() int32
 //go:wasmimport env get_input
 func hostGetInput(ptr unsafe.Pointer, len int32) int32
 
-// Helper to log a string
 func log(level int, msg string) {
 	ptr := unsafe.Pointer(unsafe.StringData(msg))
 	hostLog(int32(level), ptr, int32(len(msg)))
 }
 
-// Helper to set output
 func setOutput(msg string) {
 	ptr := unsafe.Pointer(unsafe.StringData(msg))
 	hostOutput(ptr, int32(len(msg)))
 }
 
-// Helper to read the input event data
 func getInput() []byte {
 	length := hostGetInputLen()
 	if length <= 0 {
@@ -49,7 +44,6 @@ func getInput() []byte {
 	return buf[:read]
 }
 
-// CanonicalEvent represents the event structure from the platform
 type CanonicalEvent struct {
 	EventID    string `json:"event_id"`
 	Chain      int    `json:"chain"`
@@ -57,10 +51,9 @@ type CanonicalEvent struct {
 	TxHash     string `json:"tx_hash"`
 	EventType  string `json:"event_type"`
 	Timestamp  string `json:"timestamp"`
-	Payload    string `json:"payload"` // Base64 encoded
+	Payload    string `json:"payload"`
 }
 
-// SolanaLogsPayload is the decoded payload structure from Solana logsSubscribe
 type SolanaLogsPayload struct {
 	Result struct {
 		Context struct {
@@ -74,7 +67,6 @@ type SolanaLogsPayload struct {
 	} `json:"result"`
 }
 
-// Known program IDs for display
 var programNames = map[string]string{
 	"11111111111111111111111111111111":             "System Program",
 	"TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA": "Token Program",
@@ -89,7 +81,6 @@ var programNames = map[string]string{
 }
 
 func main() {
-	// Read the incoming event
 	eventData := getInput()
 	if eventData == nil {
 		log(2, "No event data received")
@@ -97,7 +88,6 @@ func main() {
 		return
 	}
 
-	// Parse the canonical event
 	var event CanonicalEvent
 	if err := json.Unmarshal(eventData, &event); err != nil {
 		log(2, "Failed to parse event: "+err.Error())
@@ -109,7 +99,6 @@ func main() {
 	log(1, fmt.Sprintf("📦 Solana Transaction @ Slot %d", event.BlockNum))
 	log(1, fmt.Sprintf("🔗 Signature: %s", truncate(event.TxHash, 20)))
 
-	// Decode the base64 payload
 	if event.Payload == "" {
 		log(2, "No payload in event")
 		setOutput(`{"status": "ok", "message": "No payload"}`)
@@ -123,7 +112,6 @@ func main() {
 		return
 	}
 
-	// Parse the Solana logs payload
 	var solanaPayload SolanaLogsPayload
 	if err := json.Unmarshal(payloadBytes, &solanaPayload); err != nil {
 		log(2, "Failed to parse Solana payload: "+err.Error())
@@ -131,17 +119,14 @@ func main() {
 		return
 	}
 
-	// Check for errors
 	if solanaPayload.Result.Value.Err != nil {
 		log(2, fmt.Sprintf("❌ Transaction FAILED: %v", solanaPayload.Result.Value.Err))
 	}
 
-	// Analyze the logs
 	programs := make(map[string]bool)
 	var actions []string
 
 	for _, logLine := range solanaPayload.Result.Value.Logs {
-		// Extract program invocations
 		if strings.HasPrefix(logLine, "Program ") && strings.Contains(logLine, " invoke") {
 			parts := strings.Split(logLine, " ")
 			if len(parts) >= 2 {
@@ -150,11 +135,9 @@ func main() {
 			}
 		}
 
-		// Extract interesting log messages
 		if strings.Contains(logLine, "Program log:") {
 			msg := strings.TrimPrefix(logLine, "Program log: ")
 
-			// Detect specific actions
 			if strings.Contains(msg, "Transfer") {
 				actions = append(actions, "💸 Token Transfer")
 			}
@@ -173,7 +156,6 @@ func main() {
 		}
 	}
 
-	// Log programs involved
 	log(1, "📋 Programs:")
 	for programID := range programs {
 		name, known := programNames[programID]
@@ -184,9 +166,7 @@ func main() {
 		}
 	}
 
-	// Log detected actions
 	if len(actions) > 0 {
-		// Dedupe actions
 		seen := make(map[string]bool)
 		log(1, "⚡ Actions:")
 		for _, action := range actions {
@@ -199,7 +179,6 @@ func main() {
 
 	log(1, "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 
-	// Build output
 	output := map[string]interface{}{
 		"status":    "success",
 		"slot":      event.BlockNum,

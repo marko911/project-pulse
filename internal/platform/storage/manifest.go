@@ -11,7 +11,6 @@ import (
 	protov1 "github.com/marko911/project-pulse/pkg/proto/v1"
 )
 
-// ManifestRecord represents a manifest stored in the database.
 type ManifestRecord struct {
 	ID                 int64     `db:"id"`
 	Chain              int16     `db:"chain"`
@@ -23,24 +22,20 @@ type ManifestRecord struct {
 	EmittedTxCount     int32     `db:"emitted_tx_count"`
 	EmittedEventCount  int32     `db:"emitted_event_count"`
 	EventIdsHash       string    `db:"event_ids_hash"`
-	SourcesUsed        []byte    `db:"sources_used"` // JSONB
+	SourcesUsed        []byte    `db:"sources_used"`
 	BlockTimestamp     time.Time `db:"block_timestamp"`
 	IngestedAt         time.Time `db:"ingested_at"`
 	ManifestCreatedAt  time.Time `db:"manifest_created_at"`
 }
 
-// ManifestRepository handles persistence of manifests.
 type ManifestRepository struct {
 	db *DB
 }
 
-// NewManifestRepository creates a new ManifestRepository.
 func NewManifestRepository(db *DB) *ManifestRepository {
 	return &ManifestRepository{db: db}
 }
 
-// Save persists a manifest to the database.
-// Uses upsert semantics - if a manifest for the same chain/block exists, it's replaced.
 func (r *ManifestRepository) Save(ctx context.Context, manifest *protov1.Manifest) error {
 	sourcesJSON, err := json.Marshal(manifest.SourcesUsed)
 	if err != nil {
@@ -96,7 +91,6 @@ func (r *ManifestRepository) Save(ctx context.Context, manifest *protov1.Manifes
 	return nil
 }
 
-// SaveBatch persists multiple manifests in a single transaction.
 func (r *ManifestRepository) SaveBatch(ctx context.Context, manifests []*protov1.Manifest) error {
 	if len(manifests) == 0 {
 		return nil
@@ -159,7 +153,6 @@ func (r *ManifestRepository) SaveBatch(ctx context.Context, manifests []*protov1
 	})
 }
 
-// GetByBlock retrieves a manifest by chain and block number.
 func (r *ManifestRepository) GetByBlock(ctx context.Context, chain protov1.Chain, blockNumber uint64) (*ManifestRecord, error) {
 	sql := `
 		SELECT id, chain, block_number, block_hash, parent_hash,
@@ -191,7 +184,6 @@ func (r *ManifestRepository) GetByBlock(ctx context.Context, chain protov1.Chain
 	return &m, nil
 }
 
-// GetByBlockHash retrieves a manifest by chain and block hash.
 func (r *ManifestRepository) GetByBlockHash(ctx context.Context, chain protov1.Chain, blockHash string) (*ManifestRecord, error) {
 	sql := `
 		SELECT id, chain, block_number, block_hash, parent_hash,
@@ -222,7 +214,6 @@ func (r *ManifestRepository) GetByBlockHash(ctx context.Context, chain protov1.C
 	return &m, nil
 }
 
-// GetBlockRange retrieves manifests for a range of blocks.
 func (r *ManifestRepository) GetBlockRange(ctx context.Context, chain protov1.Chain, fromBlock, toBlock uint64) ([]ManifestRecord, error) {
 	sql := `
 		SELECT id, chain, block_number, block_hash, parent_hash,
@@ -260,7 +251,6 @@ func (r *ManifestRepository) GetBlockRange(ctx context.Context, chain protov1.Ch
 	return manifests, rows.Err()
 }
 
-// FindMismatches returns manifests where expected counts don't match emitted counts.
 func (r *ManifestRepository) FindMismatches(ctx context.Context, chain protov1.Chain, limit int) ([]ManifestRecord, error) {
 	sql := `
 		SELECT id, chain, block_number, block_hash, parent_hash,
@@ -301,7 +291,6 @@ func (r *ManifestRepository) FindMismatches(ctx context.Context, chain protov1.C
 	return manifests, rows.Err()
 }
 
-// GetLatestBlock returns the highest block number with a manifest for the given chain.
 func (r *ManifestRepository) GetLatestBlock(ctx context.Context, chain protov1.Chain) (uint64, error) {
 	sql := `
 		SELECT COALESCE(MAX(block_number), 0)
@@ -318,7 +307,6 @@ func (r *ManifestRepository) GetLatestBlock(ctx context.Context, chain protov1.C
 	return uint64(blockNumber), nil
 }
 
-// CountByChain returns the total number of manifests for a chain.
 func (r *ManifestRepository) CountByChain(ctx context.Context, chain protov1.Chain) (int64, error) {
 	sql := `SELECT COUNT(*) FROM manifests WHERE chain = $1`
 
@@ -331,7 +319,6 @@ func (r *ManifestRepository) CountByChain(ctx context.Context, chain protov1.Cha
 	return count, nil
 }
 
-// ToProto converts a ManifestRecord to a protov1.Manifest.
 func (m *ManifestRecord) ToProto() (*protov1.Manifest, error) {
 	var sources []string
 	if err := json.Unmarshal(m.SourcesUsed, &sources); err != nil {

@@ -5,7 +5,6 @@ import (
 	"time"
 )
 
-// Block represents an EVM block with relevant fields for event processing.
 type Block struct {
 	Number       uint64
 	Hash         string
@@ -18,7 +17,6 @@ type Block struct {
 	BaseFee      *big.Int
 }
 
-// Transaction represents an EVM transaction.
 type Transaction struct {
 	Hash        string
 	Index       uint32
@@ -32,10 +30,9 @@ type Transaction struct {
 	BlockNumber uint64
 	BlockHash   string
 	Logs        []Log
-	Status      uint64 // 1 = success, 0 = failure
+	Status      uint64
 }
 
-// Log represents an EVM event log.
 type Log struct {
 	Address     string
 	Topics      []string
@@ -48,7 +45,6 @@ type Log struct {
 	Removed     bool
 }
 
-// BlockHeader is a lightweight block representation for tracking.
 type BlockHeader struct {
 	Number     uint64
 	Hash       string
@@ -56,7 +52,6 @@ type BlockHeader struct {
 	Timestamp  time.Time
 }
 
-// CommitmentLevel represents the finality state of a block.
 type CommitmentLevel int
 
 const (
@@ -65,7 +60,6 @@ const (
 	CommitmentFinalized
 )
 
-// String returns the string representation of the commitment level.
 func (c CommitmentLevel) String() string {
 	switch c {
 	case CommitmentProcessed:
@@ -79,7 +73,6 @@ func (c CommitmentLevel) String() string {
 	}
 }
 
-// TopicName returns the Kafka/Redpanda topic name for this commitment level.
 func (c CommitmentLevel) TopicName(chain string) string {
 	return "events." + chain + "." + c.String()
 }

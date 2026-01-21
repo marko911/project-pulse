@@ -14,25 +14,18 @@ import (
 	protov1 "github.com/marko911/project-pulse/pkg/proto/v1"
 )
 
-// ReconcilerConfig holds configuration for the reconciler.
 type ReconcilerConfig struct {
-	// ReconcileInterval is how often to check for blocks needing reconciliation
 	ReconcileInterval time.Duration
 
-	// BatchSize is the max number of blocks to reconcile per cycle
 	BatchSize int
 
-	// LookbackBlocks is how far back to look for unreconciled blocks
 	LookbackBlocks uint64
 
-	// FailClosed halts on any reconciliation mismatch
 	FailClosed bool
 
-	// MetricsAddr for HTTP metrics endpoint
 	MetricsAddr string
 }
 
-// DefaultReconcilerConfig returns sensible defaults.
 func DefaultReconcilerConfig() ReconcilerConfig {
 	return ReconcilerConfig{
 		ReconcileInterval: 30 * time.Second,
@@ -43,7 +36,6 @@ func DefaultReconcilerConfig() ReconcilerConfig {
 	}
 }
 
-// ReconciliationResult represents the outcome of reconciling a single block.
 type ReconciliationResult struct {
 	Chain              protov1.Chain
 	BlockNumber        uint64
@@ -55,7 +47,6 @@ type ReconciliationResult struct {
 	ReconciledAt       time.Time
 }
 
-// Reconciler compares local manifests with golden source data.
 type Reconciler struct {
 	cfg      ReconcilerConfig
 	logger   *slog.Logger
@@ -72,7 +63,6 @@ type Reconciler struct {
 	metricsServer *http.Server
 }
 
-// ReconcilerStats tracks reconciliation statistics.
 type ReconcilerStats struct {
 	BlocksReconciled   int64
 	BlocksMatched      int64
@@ -83,7 +73,6 @@ type ReconcilerStats struct {
 	LastReconciledAt   time.Time
 }
 
-// NewReconciler creates a new reconciler.
 func NewReconciler(cfg ReconcilerConfig, db *storage.DB, verifier *goldensource.Verifier, logger *slog.Logger) *Reconciler {
 	return &Reconciler{
 		cfg:      cfg,
@@ -95,7 +84,6 @@ func NewReconciler(cfg ReconcilerConfig, db *storage.DB, verifier *goldensource.
 	}
 }
 
-// Run starts the reconciliation loop.
 func (r *Reconciler) Run(ctx context.Context) error {
 	r.logger.Info("starting reconciler",
 		"interval", r.cfg.ReconcileInterval,
@@ -103,7 +91,6 @@ func (r *Reconciler) Run(ctx context.Context) error {
 		"fail_closed", r.cfg.FailClosed,
 	)
 
-	// Start metrics server
 	if r.cfg.MetricsAddr != "" {
 		go r.startMetricsServer()
 	}
@@ -111,7 +98,6 @@ func (r *Reconciler) Run(ctx context.Context) error {
 	ticker := time.NewTicker(r.cfg.ReconcileInterval)
 	defer ticker.Stop()
 
-	// Run initial reconciliation
 	if err := r.reconcileCycle(ctx); err != nil {
 		if r.cfg.FailClosed && r.halted {
 			return fmt.Errorf("reconciler halted: %s", r.haltReason)
@@ -144,13 +130,11 @@ func (r *Reconciler) Run(ctx context.Context) error {
 	}
 }
 
-// reconcileCycle performs a single reconciliation pass.
 func (r *Reconciler) reconcileCycle(ctx context.Context) error {
 	r.mu.Lock()
 	r.lastReconcile = time.Now()
 	r.mu.Unlock()
 
-	// Get chains with registered golden source clients
 	chains := r.getActiveChains()
 	if len(chains) == 0 {
 		r.logger.Debug("no golden source clients registered, skipping cycle")
@@ -166,9 +150,7 @@ func (r *Reconciler) reconcileCycle(ctx context.Context) error {
 	return nil
 }
 
-// reconcileChain reconciles manifests for a single chain.
 func (r *Reconciler) reconcileChain(ctx context.Context, chain protov1.Chain) error {
-	// Get latest manifest block
 	latestBlock, err := r.repo.GetLatestBlock(ctx, chain)
 	if err != nil {
 		return fmt.Errorf("get latest block for chain %v: %w", chain, err)
@@ -179,13 +161,11 @@ func (r *Reconciler) reconcileChain(ctx context.Context, chain protov1.Chain) er
 		return nil
 	}
 
-	// Calculate range to reconcile
 	fromBlock := uint64(0)
 	if latestBlock > r.cfg.LookbackBlocks {
 		fromBlock = latestBlock - r.cfg.LookbackBlocks
 	}
 
-	// Get manifests in range
 	manifests, err := r.repo.GetBlockRange(ctx, chain, fromBlock, latestBlock)
 	if err != nil {
 		return fmt.Errorf("get block range: %w", err)
@@ -195,7 +175,6 @@ func (r *Reconciler) reconcileChain(ctx context.Context, chain protov1.Chain) er
 		return nil
 	}
 
-	// Limit to batch size
 	if len(manifests) > r.cfg.BatchSize {
 		manifests = manifests[len(manifests)-r.cfg.BatchSize:]
 	}
@@ -207,7 +186,6 @@ func (r *Reconciler) reconcileChain(ctx context.Context, chain protov1.Chain) er
 		"count", len(manifests),
 	)
 
-	// Reconcile each manifest
 	for _, manifest := range manifests {
 		result, err := r.reconcileManifest(ctx, &manifest)
 		if err != nil {
@@ -233,7 +211,6 @@ func (r *Reconciler) reconcileChain(ctx context.Context, chain protov1.Chain) er
 		} else {
 			r.stats.BlocksMismatched++
 
-			// Fail-closed behavior
 			if r.cfg.FailClosed {
 				r.halted = true
 				r.haltReason = fmt.Sprintf("mismatch at block %d: %v",
@@ -269,11 +246,9 @@ func (r *Reconciler) reconcileChain(ctx context.Context, chain protov1.Chain) er
 	return nil
 }
 
-// reconcileManifest compares a single manifest against golden source.
 func (r *Reconciler) reconcileManifest(ctx context.Context, manifest *storage.ManifestRecord) (*ReconciliationResult, error) {
 	chain := protov1.Chain(manifest.Chain)
 
-	// Build primary block data from manifest
 	primary := &goldensource.BlockData{
 		Chain:            chain,
 		BlockNumber:      uint64(manifest.BlockNumber),
@@ -284,13 +259,11 @@ func (r *Reconciler) reconcileManifest(ctx context.Context, manifest *storage.Ma
 		FetchedAt:        manifest.IngestedAt,
 	}
 
-	// Verify against golden source
 	verifyResult, err := r.verifier.VerifyBlock(ctx, primary)
 	if err != nil {
 		return nil, fmt.Errorf("verify block: %w", err)
 	}
 
-	// Skip if verification was skipped (sampling or unavailable)
 	if verifyResult == nil {
 		r.mu.Lock()
 		r.stats.BlocksSkipped++
@@ -298,7 +271,7 @@ func (r *Reconciler) reconcileManifest(ctx context.Context, manifest *storage.Ma
 		return &ReconciliationResult{
 			Chain:       chain,
 			BlockNumber: uint64(manifest.BlockNumber),
-			Matched:     true, // Skipped counts as matched
+			Matched:     true,
 		}, nil
 	}
 
@@ -312,7 +285,6 @@ func (r *Reconciler) reconcileManifest(ctx context.Context, manifest *storage.Ma
 		ReconciledAt:  time.Now(),
 	}
 
-	// Collect error messages
 	for _, e := range verifyResult.Errors {
 		result.Errors = append(result.Errors, e.Error())
 	}
@@ -320,16 +292,12 @@ func (r *Reconciler) reconcileManifest(ctx context.Context, manifest *storage.Ma
 	return result, nil
 }
 
-// getActiveChains returns chains with registered golden source clients.
 func (r *Reconciler) getActiveChains() []protov1.Chain {
-	// For now, check which chains we have manifests for
-	// In production, this would come from the verifier's registered clients
 	chains := []protov1.Chain{
 		protov1.Chain_CHAIN_ETHEREUM,
 		protov1.Chain_CHAIN_SOLANA,
 	}
 
-	// Filter to chains with actual data
 	active := make([]protov1.Chain, 0)
 	for _, chain := range chains {
 		count, err := r.repo.CountByChain(context.Background(), chain)
@@ -341,21 +309,18 @@ func (r *Reconciler) getActiveChains() []protov1.Chain {
 	return active
 }
 
-// IsHalted returns whether the reconciler is halted.
 func (r *Reconciler) IsHalted() bool {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	return r.halted
 }
 
-// HaltReason returns the reason for the halt.
 func (r *Reconciler) HaltReason() string {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	return r.haltReason
 }
 
-// ResolveHalt clears the halt state after issue resolution.
 func (r *Reconciler) ResolveHalt(resolution string) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -374,14 +339,12 @@ func (r *Reconciler) ResolveHalt(resolution string) error {
 	return nil
 }
 
-// Stats returns current reconciliation statistics.
 func (r *Reconciler) Stats() ReconcilerStats {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	return *r.stats
 }
 
-// startMetricsServer starts the HTTP metrics endpoint.
 func (r *Reconciler) startMetricsServer() {
 	mux := http.NewServeMux()
 
@@ -462,7 +425,6 @@ func (r *Reconciler) startMetricsServer() {
 	}
 }
 
-// Shutdown gracefully shuts down the reconciler.
 func (r *Reconciler) Shutdown(ctx context.Context) error {
 	r.logger.Info("shutting down reconciler")
 

@@ -8,17 +8,14 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-// FunctionRepository handles persistence of WASM functions and related entities.
 type FunctionRepository struct {
 	db *DB
 }
 
-// NewFunctionRepository creates a new FunctionRepository.
 func NewFunctionRepository(db *DB) *FunctionRepository {
 	return &FunctionRepository{db: db}
 }
 
-// CreateFunction inserts a new function.
 func (r *FunctionRepository) CreateFunction(ctx context.Context, f *Function) error {
 	sql := `
 		INSERT INTO functions (
@@ -34,7 +31,6 @@ func (r *FunctionRepository) CreateFunction(ctx context.Context, f *Function) er
 	).Scan(&f.ID, &f.CurrentVersion, &f.CreatedAt, &f.UpdatedAt)
 }
 
-// GetFunction retrieves a function by ID.
 func (r *FunctionRepository) GetFunction(ctx context.Context, id string) (*Function, error) {
 	sql := `
 		SELECT id, tenant_id, name, description, runtime_version,
@@ -60,7 +56,6 @@ func (r *FunctionRepository) GetFunction(ctx context.Context, id string) (*Funct
 	return &f, nil
 }
 
-// GetFunctionByName retrieves a function by tenant and name.
 func (r *FunctionRepository) GetFunctionByName(ctx context.Context, tenantID, name string) (*Function, error) {
 	sql := `
 		SELECT id, tenant_id, name, description, runtime_version,
@@ -86,7 +81,6 @@ func (r *FunctionRepository) GetFunctionByName(ctx context.Context, tenantID, na
 	return &f, nil
 }
 
-// ListFunctions retrieves functions for a tenant with pagination.
 func (r *FunctionRepository) ListFunctions(ctx context.Context, tenantID string, limit, offset int) ([]Function, error) {
 	sql := `
 		SELECT id, tenant_id, name, description, runtime_version,
@@ -121,7 +115,6 @@ func (r *FunctionRepository) ListFunctions(ctx context.Context, tenantID string,
 	return functions, rows.Err()
 }
 
-// UpdateFunction updates a function's metadata.
 func (r *FunctionRepository) UpdateFunction(ctx context.Context, f *Function) error {
 	sql := `
 		UPDATE functions
@@ -145,7 +138,6 @@ func (r *FunctionRepository) UpdateFunction(ctx context.Context, f *Function) er
 	return nil
 }
 
-// DeleteFunction soft-deletes a function.
 func (r *FunctionRepository) DeleteFunction(ctx context.Context, id string) error {
 	sql := `
 		UPDATE functions
@@ -165,7 +157,6 @@ func (r *FunctionRepository) DeleteFunction(ctx context.Context, id string) erro
 	return nil
 }
 
-// CreateTrigger inserts a new trigger.
 func (r *FunctionRepository) CreateTrigger(ctx context.Context, t *Trigger) error {
 	sql := `
 		INSERT INTO triggers (
@@ -183,7 +174,6 @@ func (r *FunctionRepository) CreateTrigger(ctx context.Context, t *Trigger) erro
 	).Scan(&t.ID, &t.CreatedAt, &t.UpdatedAt)
 }
 
-// GetTrigger retrieves a trigger by ID.
 func (r *FunctionRepository) GetTrigger(ctx context.Context, id string) (*Trigger, error) {
 	sql := `
 		SELECT id, function_id, tenant_id, name, event_type, filter_chain,
@@ -209,7 +199,6 @@ func (r *FunctionRepository) GetTrigger(ctx context.Context, id string) (*Trigge
 	return &t, nil
 }
 
-// ListTriggersByFunction retrieves all triggers for a function.
 func (r *FunctionRepository) ListTriggersByFunction(ctx context.Context, functionID string) ([]Trigger, error) {
 	sql := `
 		SELECT id, function_id, tenant_id, name, event_type, filter_chain,
@@ -243,7 +232,6 @@ func (r *FunctionRepository) ListTriggersByFunction(ctx context.Context, functio
 	return triggers, rows.Err()
 }
 
-// FindMatchingTriggers finds triggers that match an event.
 func (r *FunctionRepository) FindMatchingTriggers(ctx context.Context, eventType string, chain *int16, address *string) ([]Trigger, error) {
 	sql := `
 		SELECT id, function_id, tenant_id, name, event_type, filter_chain,
@@ -280,7 +268,6 @@ func (r *FunctionRepository) FindMatchingTriggers(ctx context.Context, eventType
 	return triggers, rows.Err()
 }
 
-// DeleteTrigger soft-deletes a trigger.
 func (r *FunctionRepository) DeleteTrigger(ctx context.Context, id string) error {
 	sql := `
 		UPDATE triggers
@@ -300,7 +287,6 @@ func (r *FunctionRepository) DeleteTrigger(ctx context.Context, id string) error
 	return nil
 }
 
-// ListTriggersByTenant retrieves all triggers for a tenant with pagination.
 func (r *FunctionRepository) ListTriggersByTenant(ctx context.Context, tenantID string, limit, offset int) ([]Trigger, error) {
 	sql := `
 		SELECT id, function_id, tenant_id, name, event_type, filter_chain,
@@ -335,7 +321,6 @@ func (r *FunctionRepository) ListTriggersByTenant(ctx context.Context, tenantID 
 	return triggers, rows.Err()
 }
 
-// UpdateTrigger updates a trigger's fields.
 func (r *FunctionRepository) UpdateTrigger(ctx context.Context, t *Trigger) error {
 	sql := `
 		UPDATE triggers
@@ -361,10 +346,8 @@ func (r *FunctionRepository) UpdateTrigger(ctx context.Context, t *Trigger) erro
 	return nil
 }
 
-// CreateDeployment inserts a new deployment and updates the function.
 func (r *FunctionRepository) CreateDeployment(ctx context.Context, d *Deployment) error {
 	return r.db.WithTx(ctx, func(tx pgx.Tx) error {
-		// Get and increment the function's version
 		var nextVersion int
 		err := tx.QueryRow(ctx, `
 			UPDATE functions
@@ -381,7 +364,6 @@ func (r *FunctionRepository) CreateDeployment(ctx context.Context, d *Deployment
 
 		d.Version = nextVersion
 
-		// Mark previous active deployment as superseded
 		_, err = tx.Exec(ctx, `
 			UPDATE deployments
 			SET status = 'superseded'
@@ -391,7 +373,6 @@ func (r *FunctionRepository) CreateDeployment(ctx context.Context, d *Deployment
 			return fmt.Errorf("supersede old deployments: %w", err)
 		}
 
-		// Insert the new deployment
 		sql := `
 			INSERT INTO deployments (
 				function_id, tenant_id, version, module_hash, module_size,
@@ -412,7 +393,6 @@ func (r *FunctionRepository) CreateDeployment(ctx context.Context, d *Deployment
 	})
 }
 
-// GetDeployment retrieves a deployment by ID.
 func (r *FunctionRepository) GetDeployment(ctx context.Context, id string) (*Deployment, error) {
 	sql := `
 		SELECT id, function_id, tenant_id, version, module_hash, module_size,
@@ -438,7 +418,6 @@ func (r *FunctionRepository) GetDeployment(ctx context.Context, id string) (*Dep
 	return &d, nil
 }
 
-// GetActiveDeployment retrieves the active deployment for a function.
 func (r *FunctionRepository) GetActiveDeployment(ctx context.Context, functionID string) (*Deployment, error) {
 	sql := `
 		SELECT id, function_id, tenant_id, version, module_hash, module_size,
@@ -464,7 +443,6 @@ func (r *FunctionRepository) GetActiveDeployment(ctx context.Context, functionID
 	return &d, nil
 }
 
-// ListDeployments retrieves deployment history for a function.
 func (r *FunctionRepository) ListDeployments(ctx context.Context, functionID string, limit int) ([]Deployment, error) {
 	sql := `
 		SELECT id, function_id, tenant_id, version, module_hash, module_size,
@@ -499,12 +477,10 @@ func (r *FunctionRepository) ListDeployments(ctx context.Context, functionID str
 	return deployments, rows.Err()
 }
 
-// RollbackDeployment activates a previous deployment version.
 func (r *FunctionRepository) RollbackDeployment(ctx context.Context, functionID string, targetVersion int) (*Deployment, error) {
 	var d Deployment
 
 	err := r.db.WithTx(ctx, func(tx pgx.Tx) error {
-		// Get the target deployment
 		sql := `
 			SELECT id, function_id, tenant_id, version, module_hash, module_size,
 			       module_path, source_hash, build_log, deployed_by,
@@ -524,7 +500,6 @@ func (r *FunctionRepository) RollbackDeployment(ctx context.Context, functionID 
 			return fmt.Errorf("query target deployment: %w", err)
 		}
 
-		// Mark current active deployment as rollback
 		_, err = tx.Exec(ctx, `
 			UPDATE deployments
 			SET status = 'rollback'
@@ -534,7 +509,6 @@ func (r *FunctionRepository) RollbackDeployment(ctx context.Context, functionID 
 			return fmt.Errorf("mark current as rollback: %w", err)
 		}
 
-		// Activate the target deployment
 		activatedAt := time.Now().UTC()
 		_, err = tx.Exec(ctx, `
 			UPDATE deployments
@@ -548,7 +522,6 @@ func (r *FunctionRepository) RollbackDeployment(ctx context.Context, functionID 
 		d.Status = DeploymentStatusActive
 		d.ActivatedAt = &activatedAt
 
-		// Update function to reflect rollback
 		_, err = tx.Exec(ctx, `
 			UPDATE functions
 			SET module_hash = $2, module_size = $3, updated_at = NOW()
@@ -568,7 +541,6 @@ func (r *FunctionRepository) RollbackDeployment(ctx context.Context, functionID 
 	return &d, nil
 }
 
-// RecordInvocation records a function invocation result.
 func (r *FunctionRepository) RecordInvocation(ctx context.Context, inv *Invocation) error {
 	sql := `
 		INSERT INTO invocations (
@@ -588,7 +560,6 @@ func (r *FunctionRepository) RecordInvocation(ctx context.Context, inv *Invocati
 	).Scan(&inv.ID)
 }
 
-// GetInvocationStats retrieves aggregated invocation statistics for a function.
 func (r *FunctionRepository) GetInvocationStats(ctx context.Context, functionID string, since time.Time) (*InvocationStats, error) {
 	sql := `
 		SELECT
@@ -618,7 +589,6 @@ func (r *FunctionRepository) GetInvocationStats(ctx context.Context, functionID 
 	return &stats, nil
 }
 
-// InvocationStats holds aggregated invocation statistics.
 type InvocationStats struct {
 	TotalInvocations      int64   `json:"total_invocations"`
 	SuccessfulInvocations int64   `json:"successful_invocations"`
@@ -628,7 +598,6 @@ type InvocationStats struct {
 	AvgMemoryBytes        float64 `json:"avg_memory_bytes"`
 }
 
-// ListInvocations retrieves invocation history for a function with pagination.
 func (r *FunctionRepository) ListInvocations(ctx context.Context, functionID string, limit, offset int) ([]Invocation, error) {
 	sql := `
 		SELECT id, function_id, trigger_id, tenant_id, deployment_id, request_id,

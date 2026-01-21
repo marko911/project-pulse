@@ -1,4 +1,3 @@
-// Package storage provides database access and repositories for the Pulse system.
 package storage
 
 import (
@@ -14,7 +13,6 @@ import (
 //go:embed migrations/*.sql
 var migrationsFS embed.FS
 
-// Config holds database configuration.
 type Config struct {
 	Host     string
 	Port     int
@@ -23,7 +21,6 @@ type Config struct {
 	Database string
 	SSLMode  string
 
-	// Pool settings
 	MaxConns          int32
 	MinConns          int32
 	MaxConnLifetime   time.Duration
@@ -31,7 +28,6 @@ type Config struct {
 	HealthCheckPeriod time.Duration
 }
 
-// DefaultConfig returns sensible defaults for local development.
 func DefaultConfig() Config {
 	return Config{
 		Host:              "localhost",
@@ -48,7 +44,6 @@ func DefaultConfig() Config {
 	}
 }
 
-// ConnectionString returns the PostgreSQL connection string.
 func (c Config) ConnectionString() string {
 	return fmt.Sprintf(
 		"postgres://%s:%s@%s:%d/%s?sslmode=%s",
@@ -56,15 +51,12 @@ func (c Config) ConnectionString() string {
 	)
 }
 
-// DB wraps a pgxpool for database operations.
 type DB struct {
 	pool *pgxpool.Pool
 	cfg  Config
 }
 
-// New creates a new database connection pool.
 func New(ctx context.Context, cfg Config) (*DB, error) {
-	// Apply defaults for pool settings if not specified
 	defaults := DefaultConfig()
 	if cfg.MaxConns == 0 {
 		cfg.MaxConns = defaults.MaxConns
@@ -98,7 +90,6 @@ func New(ctx context.Context, cfg Config) (*DB, error) {
 		return nil, fmt.Errorf("create pool: %w", err)
 	}
 
-	// Verify connection
 	if err := pool.Ping(ctx); err != nil {
 		pool.Close()
 		return nil, fmt.Errorf("ping: %w", err)
@@ -107,28 +98,22 @@ func New(ctx context.Context, cfg Config) (*DB, error) {
 	return &DB{pool: pool, cfg: cfg}, nil
 }
 
-// Close closes the connection pool.
 func (db *DB) Close() {
 	db.pool.Close()
 }
 
-// Pool returns the underlying connection pool for advanced operations.
 func (db *DB) Pool() *pgxpool.Pool {
 	return db.pool
 }
 
-// Health checks database connectivity.
 func (db *DB) Health(ctx context.Context) error {
 	return db.pool.Ping(ctx)
 }
 
-// BeginTx starts a new transaction.
 func (db *DB) BeginTx(ctx context.Context) (pgx.Tx, error) {
 	return db.pool.Begin(ctx)
 }
 
-// WithTx executes a function within a transaction.
-// The transaction is committed if the function returns nil, otherwise rolled back.
 func (db *DB) WithTx(ctx context.Context, fn func(tx pgx.Tx) error) error {
 	tx, err := db.pool.Begin(ctx)
 	if err != nil {

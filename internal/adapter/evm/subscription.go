@@ -15,7 +15,6 @@ import (
 	"github.com/marko911/project-pulse/internal/adapter"
 )
 
-// BlockSubscriber manages block and log subscriptions.
 type BlockSubscriber struct {
 	client *Client
 	cfg    *ProcessingConfig
@@ -25,11 +24,9 @@ type BlockSubscriber struct {
 	latestBlock     uint64
 	processedBlocks map[uint64]bool
 
-	// Channels
 	events chan<- adapter.Event
 }
 
-// NewBlockSubscriber creates a new block subscription manager.
 func NewBlockSubscriber(client *Client, cfg *ProcessingConfig, logger *slog.Logger) *BlockSubscriber {
 	return &BlockSubscriber{
 		client:          client,
@@ -39,7 +36,6 @@ func NewBlockSubscriber(client *Client, cfg *ProcessingConfig, logger *slog.Logg
 	}
 }
 
-// Subscribe starts the block subscription and emits events.
 func (s *BlockSubscriber) Subscribe(ctx context.Context, events chan<- adapter.Event) error {
 	s.events = events
 
@@ -49,7 +45,6 @@ func (s *BlockSubscriber) Subscribe(ctx context.Context, events chan<- adapter.E
 	return s.pollHTTP(ctx)
 }
 
-// subscribeWS uses WebSocket subscription for real-time blocks.
 func (s *BlockSubscriber) subscribeWS(ctx context.Context) error {
 	s.logger.Info("starting WebSocket block subscription")
 
@@ -77,11 +72,9 @@ func (s *BlockSubscriber) subscribeWS(ctx context.Context) error {
 	}
 }
 
-// pollHTTP polls for new blocks via HTTP RPC.
 func (s *BlockSubscriber) pollHTTP(ctx context.Context) error {
 	s.logger.Info("starting HTTP polling for blocks")
 
-	// Get starting block
 	var startBlock uint64
 	if s.cfg.StartBlock > 0 {
 		startBlock = s.cfg.StartBlock
@@ -99,7 +92,7 @@ func (s *BlockSubscriber) pollHTTP(ctx context.Context) error {
 
 	s.logger.Info("starting from block", "block", startBlock)
 
-	ticker := time.NewTicker(1 * time.Second) // Poll every second
+	ticker := time.NewTicker(1 * time.Second)
 	defer ticker.Stop()
 
 	for {
@@ -115,7 +108,6 @@ func (s *BlockSubscriber) pollHTTP(ctx context.Context) error {
 	}
 }
 
-// pollNewBlocks checks for and processes new blocks.
 func (s *BlockSubscriber) pollNewBlocks(ctx context.Context) error {
 	current, err := s.client.BlockNumber(ctx)
 	if err != nil {
@@ -130,7 +122,6 @@ func (s *BlockSubscriber) pollNewBlocks(ctx context.Context) error {
 		return nil
 	}
 
-	// Process each new block
 	for blockNum := lastProcessed + 1; blockNum <= current; blockNum++ {
 		header, err := s.client.HeaderByNumber(ctx, big.NewInt(int64(blockNum)))
 		if err != nil {
@@ -145,7 +136,6 @@ func (s *BlockSubscriber) pollNewBlocks(ctx context.Context) error {
 	return nil
 }
 
-// processHeader processes a block header and fetches logs.
 func (s *BlockSubscriber) processHeader(ctx context.Context, header *types.Header) error {
 	blockNum := header.Number.Uint64()
 
@@ -154,7 +144,6 @@ func (s *BlockSubscriber) processHeader(ctx context.Context, header *types.Heade
 		"hash", header.Hash().Hex(),
 	)
 
-	// Update latest block
 	s.mu.Lock()
 	if blockNum > s.latestBlock {
 		s.latestBlock = blockNum
@@ -162,13 +151,11 @@ func (s *BlockSubscriber) processHeader(ctx context.Context, header *types.Heade
 	s.processedBlocks[blockNum] = true
 	s.mu.Unlock()
 
-	// Fetch logs for this block
 	logs, err := s.fetchBlockLogs(ctx, blockNum)
 	if err != nil {
 		return fmt.Errorf("fetch logs: %w", err)
 	}
 
-	// Convert logs to events
 	for i, log := range logs {
 		event := s.logToEvent(header, &log, uint32(i))
 		select {
@@ -181,14 +168,12 @@ func (s *BlockSubscriber) processHeader(ctx context.Context, header *types.Heade
 	return nil
 }
 
-// fetchBlockLogs fetches all logs for a specific block.
 func (s *BlockSubscriber) fetchBlockLogs(ctx context.Context, blockNum uint64) ([]types.Log, error) {
 	query := ethereum.FilterQuery{
 		FromBlock: big.NewInt(int64(blockNum)),
 		ToBlock:   big.NewInt(int64(blockNum)),
 	}
 
-	// Apply address filter if configured
 	if len(s.cfg.WatchAddresses) > 0 {
 		addresses := make([]common.Address, len(s.cfg.WatchAddresses))
 		for i, addr := range s.cfg.WatchAddresses {
@@ -200,18 +185,15 @@ func (s *BlockSubscriber) fetchBlockLogs(ctx context.Context, blockNum uint64) (
 	return s.client.FilterLogs(ctx, query)
 }
 
-// logToEvent converts an EVM log to the canonical event format.
 func (s *BlockSubscriber) logToEvent(header *types.Header, log *types.Log, eventIndex uint32) adapter.Event {
-	// Extract accounts from log topics (topic[0] is event signature)
 	accounts := make([]string, 0)
 	accounts = append(accounts, log.Address.Hex())
 	for i := 1; i < len(log.Topics); i++ {
-		// Topics might be addresses (20 bytes padded to 32)
 		accounts = append(accounts, log.Topics[i].Hex())
 	}
 
 	return adapter.Event{
-		Chain:           "ethereum", // Will be set by adapter based on config
+		Chain:           "ethereum",
 		CommitmentLevel: "processed",
 		BlockNumber:     log.BlockNumber,
 		BlockHash:       log.BlockHash.Hex(),
@@ -227,21 +209,18 @@ func (s *BlockSubscriber) logToEvent(header *types.Header, log *types.Log, event
 	}
 }
 
-// GetLatestBlock returns the latest processed block number.
 func (s *BlockSubscriber) GetLatestBlock() uint64 {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.latestBlock
 }
 
-// LogSubscriber handles real-time log subscriptions.
 type LogSubscriber struct {
 	client *Client
 	cfg    *ProcessingConfig
 	logger *slog.Logger
 }
 
-// NewLogSubscriber creates a new log subscription manager.
 func NewLogSubscriber(client *Client, cfg *ProcessingConfig, logger *slog.Logger) *LogSubscriber {
 	return &LogSubscriber{
 		client: client,
@@ -250,7 +229,6 @@ func NewLogSubscriber(client *Client, cfg *ProcessingConfig, logger *slog.Logger
 	}
 }
 
-// Subscribe starts the log subscription for specific addresses/topics.
 func (ls *LogSubscriber) Subscribe(ctx context.Context, events chan<- types.Log) error {
 	if !ls.client.IsWebSocket() {
 		return fmt.Errorf("log subscription requires WebSocket connection")
@@ -260,7 +238,6 @@ func (ls *LogSubscriber) Subscribe(ctx context.Context, events chan<- types.Log)
 
 	query := ethereum.FilterQuery{}
 
-	// Add address filter
 	if len(ls.cfg.WatchAddresses) > 0 {
 		addresses := make([]common.Address, len(ls.cfg.WatchAddresses))
 		for i, addr := range ls.cfg.WatchAddresses {

@@ -40,7 +40,6 @@ func setupTestServer(t *testing.T) (*httptest.Server, *websocket.Conn, *Destinat
 		close(serverReady)
 	}))
 
-	// Connect client
 	wsURL := "ws" + strings.TrimPrefix(server.URL, "http")
 	clientConn, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
 	if err != nil {
@@ -68,12 +67,10 @@ func TestDestination_Send(t *testing.T) {
 	defer server.Close()
 	defer clientConn.Close()
 
-	// Start write pump in background
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	go dest.writePump(ctx)
 
-	// Send an event
 	event := &protov1.CanonicalEvent{
 		EventId:     "evt-123",
 		Chain:       protov1.Chain_CHAIN_ETHEREUM,
@@ -90,7 +87,6 @@ func TestDestination_Send(t *testing.T) {
 		t.Fatalf("send error: %v", err)
 	}
 
-	// Read from client
 	clientConn.SetReadDeadline(time.Now().Add(2 * time.Second))
 	_, message, err := clientConn.ReadMessage()
 	if err != nil {
@@ -168,18 +164,15 @@ func TestDestination_Close(t *testing.T) {
 	defer server.Close()
 	defer clientConn.Close()
 
-	// Close destination
 	err := dest.Close()
 	if err != nil {
 		t.Fatalf("close error: %v", err)
 	}
 
-	// Should be marked as closed
 	if !dest.IsClosed() {
 		t.Error("expected destination to be closed")
 	}
 
-	// Send should fail after close
 	event := &protov1.CanonicalEvent{EventId: "evt-1"}
 	err = dest.Send(context.Background(), event)
 	if err == nil {

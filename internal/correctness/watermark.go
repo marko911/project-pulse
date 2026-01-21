@@ -11,14 +11,12 @@ import (
 	protov1 "github.com/marko911/project-pulse/pkg/proto/v1"
 )
 
-// Common errors for watermark operations.
 var (
 	ErrWatermarkHalted     = errors.New("watermark advancement halted")
 	ErrWatermarkRegression = errors.New("watermark regression not allowed")
 	ErrNoCorrectnessCheck  = errors.New("block not verified for correctness")
 )
 
-// HaltSource identifies what component triggered a halt.
 type HaltSource string
 
 const (
@@ -28,7 +26,6 @@ const (
 	HaltSourceExternalCheck HaltSource = "external_check"
 )
 
-// HaltCondition represents a halt state from a specific source.
 type HaltCondition struct {
 	Source      HaltSource
 	Reason      string
@@ -37,25 +34,19 @@ type HaltCondition struct {
 	DetectedAt  time.Time
 }
 
-// WatermarkState represents the current state of the finalized watermark.
 type WatermarkState struct {
 	Chain               protov1.Chain
-	FinalizedWatermark  uint64    // Highest verified block
-	PendingWatermark    uint64    // Highest block awaiting verification
+	FinalizedWatermark  uint64
+	PendingWatermark    uint64
 	LastAdvancedAt      time.Time
 	Halted              bool
 	HaltConditions      []HaltCondition
 }
 
-// CorrectnessChecker defines the interface for checking block correctness.
 type CorrectnessChecker interface {
-	// IsBlockVerified returns true if the block has passed all correctness checks.
 	IsBlockVerified(ctx context.Context, chain protov1.Chain, blockNumber uint64) (bool, error)
 }
 
-// WatermarkController manages the fail-closed watermark policy.
-// The watermark represents the highest block that has been verified for correctness.
-// Advancement halts when any correctness failure is detected.
 type WatermarkController struct {
 	cfg    WatermarkConfig
 	logger *slog.Logger
@@ -67,24 +58,14 @@ type WatermarkController struct {
 	callbacks []WatermarkCallback
 }
 
-// WatermarkConfig configures the watermark controller.
 type WatermarkConfig struct {
-	// FailClosed halts watermark advancement on any correctness failure.
-	// Default: true
 	FailClosed bool
 
-	// RequireVerification requires explicit correctness verification before advancing.
-	// If false, watermark advances optimistically.
-	// Default: true (Milestone 3 requirement)
 	RequireVerification bool
 
-	// MaxPendingBlocks limits how far ahead pending can be from finalized.
-	// This prevents runaway processing when verification is slow.
-	// Default: 1000
 	MaxPendingBlocks uint64
 }
 
-// DefaultWatermarkConfig returns sensible defaults for production.
 func DefaultWatermarkConfig() WatermarkConfig {
 	return WatermarkConfig{
 		FailClosed:          true,
@@ -93,10 +74,8 @@ func DefaultWatermarkConfig() WatermarkConfig {
 	}
 }
 
-// WatermarkCallback is called when watermark state changes.
 type WatermarkCallback func(ctx context.Context, chain protov1.Chain, state *WatermarkState) error
 
-// NewWatermarkController creates a new watermark controller.
 func NewWatermarkController(cfg WatermarkConfig, logger *slog.Logger) *WatermarkController {
 	if logger == nil {
 		logger = slog.Default()
@@ -110,21 +89,18 @@ func NewWatermarkController(cfg WatermarkConfig, logger *slog.Logger) *Watermark
 	}
 }
 
-// SetCorrectnessChecker sets the checker for block verification.
 func (w *WatermarkController) SetCorrectnessChecker(checker CorrectnessChecker) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	w.checker = checker
 }
 
-// OnWatermarkChange registers a callback for watermark changes.
 func (w *WatermarkController) OnWatermarkChange(cb WatermarkCallback) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	w.callbacks = append(w.callbacks, cb)
 }
 
-// InitializeChain sets the initial watermark for a chain.
 func (w *WatermarkController) InitializeChain(chain protov1.Chain, startBlock uint64) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
@@ -144,7 +120,6 @@ func (w *WatermarkController) InitializeChain(chain protov1.Chain, startBlock ui
 	)
 }
 
-// GetWatermark returns the current finalized watermark for a chain.
 func (w *WatermarkController) GetWatermark(chain protov1.Chain) uint64 {
 	w.mu.RLock()
 	defer w.mu.RUnlock()
@@ -155,13 +130,11 @@ func (w *WatermarkController) GetWatermark(chain protov1.Chain) uint64 {
 	return 0
 }
 
-// GetState returns the full watermark state for a chain.
 func (w *WatermarkController) GetState(chain protov1.Chain) *WatermarkState {
 	w.mu.RLock()
 	defer w.mu.RUnlock()
 
 	if state := w.states[chain]; state != nil {
-		// Return a copy to prevent race conditions
 		copy := *state
 		copy.HaltConditions = make([]HaltCondition, len(state.HaltConditions))
 		for i, h := range state.HaltConditions {
@@ -172,8 +145,6 @@ func (w *WatermarkController) GetState(chain protov1.Chain) *WatermarkState {
 	return nil
 }
 
-// AdvanceWatermark attempts to advance the finalized watermark.
-// Returns an error if advancement is halted or verification fails.
 func (w *WatermarkController) AdvanceWatermark(ctx context.Context, chain protov1.Chain, toBlock uint64) error {
 	w.mu.Lock()
 	defer w.mu.Unlock()
@@ -183,42 +154,35 @@ func (w *WatermarkController) AdvanceWatermark(ctx context.Context, chain protov
 		return fmt.Errorf("chain %v not initialized", chain)
 	}
 
-	// Check for global halts
 	if w.cfg.FailClosed && len(w.halts) > 0 {
 		return fmt.Errorf("%w: %d halt conditions active", ErrWatermarkHalted, len(w.halts))
 	}
 
-	// Check for chain-specific halts
 	if state.Halted {
 		return fmt.Errorf("%w: chain %v has %d halt conditions",
 			ErrWatermarkHalted, chain, len(state.HaltConditions))
 	}
 
-	// Prevent regression
 	if toBlock < state.FinalizedWatermark {
 		return fmt.Errorf("%w: current=%d requested=%d",
 			ErrWatermarkRegression, state.FinalizedWatermark, toBlock)
 	}
 
-	// Already at or past this block
 	if toBlock <= state.FinalizedWatermark {
 		return nil
 	}
 
-	// Check pending limit
 	if toBlock > state.FinalizedWatermark+w.cfg.MaxPendingBlocks {
 		return fmt.Errorf("would exceed max pending blocks: %d > %d",
 			toBlock-state.FinalizedWatermark, w.cfg.MaxPendingBlocks)
 	}
 
-	// Verify correctness if required
 	if w.cfg.RequireVerification && w.checker != nil {
 		verified, err := w.checker.IsBlockVerified(ctx, chain, toBlock)
 		if err != nil {
 			return fmt.Errorf("correctness check failed: %w", err)
 		}
 		if !verified {
-			// Update pending but not finalized
 			if toBlock > state.PendingWatermark {
 				state.PendingWatermark = toBlock
 			}
@@ -226,7 +190,6 @@ func (w *WatermarkController) AdvanceWatermark(ctx context.Context, chain protov
 		}
 	}
 
-	// Advance the watermark
 	oldWatermark := state.FinalizedWatermark
 	state.FinalizedWatermark = toBlock
 	state.PendingWatermark = toBlock
@@ -238,7 +201,6 @@ func (w *WatermarkController) AdvanceWatermark(ctx context.Context, chain protov
 		"to", toBlock,
 	)
 
-	// Notify callbacks (copy to release lock)
 	callbacks := make([]WatermarkCallback, len(w.callbacks))
 	copy(callbacks, w.callbacks)
 	stateCopy := *state
@@ -254,7 +216,6 @@ func (w *WatermarkController) AdvanceWatermark(ctx context.Context, chain protov
 	return nil
 }
 
-// Halt registers a halt condition from a correctness component.
 func (w *WatermarkController) Halt(source HaltSource, chain protov1.Chain, blockNumber uint64, reason string) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
@@ -267,10 +228,8 @@ func (w *WatermarkController) Halt(source HaltSource, chain protov1.Chain, block
 		DetectedAt:  time.Now(),
 	}
 
-	// Register global halt
 	w.halts[source] = &condition
 
-	// Register chain-specific halt
 	if state := w.states[chain]; state != nil {
 		state.Halted = true
 		state.HaltConditions = append(state.HaltConditions, condition)
@@ -284,7 +243,6 @@ func (w *WatermarkController) Halt(source HaltSource, chain protov1.Chain, block
 	)
 }
 
-// ResolveHalt clears a halt condition from a specific source.
 func (w *WatermarkController) ResolveHalt(source HaltSource, resolution string) error {
 	w.mu.Lock()
 	defer w.mu.Unlock()
@@ -296,12 +254,9 @@ func (w *WatermarkController) ResolveHalt(source HaltSource, resolution string) 
 
 	chain := halt.Chain
 
-	// Remove global halt
 	delete(w.halts, source)
 
-	// Update chain state
 	if state := w.states[chain]; state != nil {
-		// Remove this halt condition
 		remaining := make([]HaltCondition, 0)
 		for _, h := range state.HaltConditions {
 			if h.Source != source {
@@ -310,7 +265,6 @@ func (w *WatermarkController) ResolveHalt(source HaltSource, resolution string) 
 		}
 		state.HaltConditions = remaining
 
-		// Clear halted flag if no conditions remain
 		if len(remaining) == 0 {
 			state.Halted = false
 		}
@@ -326,14 +280,12 @@ func (w *WatermarkController) ResolveHalt(source HaltSource, resolution string) 
 	return nil
 }
 
-// IsHalted returns whether any halt conditions are active.
 func (w *WatermarkController) IsHalted() bool {
 	w.mu.RLock()
 	defer w.mu.RUnlock()
 	return len(w.halts) > 0
 }
 
-// GetHaltConditions returns all active halt conditions.
 func (w *WatermarkController) GetHaltConditions() []HaltCondition {
 	w.mu.RLock()
 	defer w.mu.RUnlock()
@@ -345,7 +297,6 @@ func (w *WatermarkController) GetHaltConditions() []HaltCondition {
 	return conditions
 }
 
-// Stats returns current watermark statistics.
 func (w *WatermarkController) Stats() map[string]interface{} {
 	w.mu.RLock()
 	defer w.mu.RUnlock()
@@ -385,7 +336,6 @@ func (w *WatermarkController) Stats() map[string]interface{} {
 	}
 }
 
-// IntegrateGapDetector wires up a gap detector to trigger halts.
 func (w *WatermarkController) IntegrateGapDetector(detector *GapDetector) {
 	detector.OnGap(func(ctx context.Context, event *GapEvent) error {
 		chain := protoChainFromName(event.Chain)
@@ -398,7 +348,6 @@ func (w *WatermarkController) IntegrateGapDetector(detector *GapDetector) {
 	w.logger.Info("integrated gap detector with watermark controller")
 }
 
-// protoChainFromName converts a chain name string to protobuf Chain enum.
 func protoChainFromName(name string) protov1.Chain {
 	switch name {
 	case "ethereum":

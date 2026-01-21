@@ -1,5 +1,3 @@
-// Package routing provides event routing logic for matching canonical events
-// against active subscriptions and dispatching to destinations.
 package routing
 
 import (
@@ -14,58 +12,38 @@ import (
 	"github.com/marko911/project-pulse/internal/delivery/subscription"
 )
 
-// Destination represents a target for routed events (e.g., WebSocket connection, gRPC stream).
 type Destination interface {
-	// ID returns the unique identifier for this destination.
 	ID() string
 
-	// Send delivers an event to the destination.
-	// Returns an error if delivery fails.
 	Send(ctx context.Context, event *protov1.CanonicalEvent) error
 
-	// SendBatch delivers multiple events to the destination.
-	// Default implementation calls Send for each event.
 	SendBatch(ctx context.Context, events []*protov1.CanonicalEvent) error
 
-	// Close releases resources associated with the destination.
 	Close() error
 }
 
-// DestinationRegistry manages active destinations by client ID.
 type DestinationRegistry interface {
-	// Get retrieves a destination by client ID.
 	Get(clientID string) (Destination, bool)
 
-	// Register adds a destination for a client.
 	Register(clientID string, dest Destination)
 
-	// Unregister removes a destination.
 	Unregister(clientID string)
 
-	// All returns all registered destinations.
 	All() map[string]Destination
 }
 
-// RouterConfig holds configuration for the event router.
 type RouterConfig struct {
-	// Workers is the number of concurrent workers for event processing.
 	Workers int
 
-	// BatchSize is the maximum number of events to process in a batch.
 	BatchSize int
 
-	// BatchTimeout is the maximum time to wait for a full batch.
 	BatchTimeout time.Duration
 
-	// Logger for routing operations.
 	Logger *slog.Logger
 
-	// FailedEventHandler is called when event delivery fails.
-	// If nil, failures are logged and dropped.
 	FailedEventHandler func(event *protov1.CanonicalEvent, clientID string, err error)
 }
 
-// DefaultRouterConfig returns sensible defaults for router configuration.
 func DefaultRouterConfig() RouterConfig {
 	return RouterConfig{
 		Workers:      8,
@@ -75,7 +53,6 @@ func DefaultRouterConfig() RouterConfig {
 	}
 }
 
-// Router matches events against subscriptions and routes to destinations.
 type Router struct {
 	subscriptions subscription.Manager
 	destinations  DestinationRegistry
@@ -85,19 +62,16 @@ type Router struct {
 	wg      sync.WaitGroup
 	done    chan struct{}
 
-	// Metrics
 	mu              sync.RWMutex
 	eventsRouted    int64
 	eventsDropped   int64
 	matchesFound    int64
 	routingErrors   int64
-	// Timing metrics for profiling (in nanoseconds)
 	totalMatchTimeNs    int64
 	totalDeliveryTimeNs int64
 	batchesProcessed    int64
 }
 
-// NewRouter creates a new event router.
 func NewRouter(subs subscription.Manager, dests DestinationRegistry, cfg RouterConfig) *Router {
 	if cfg.Workers <= 0 {
 		cfg.Workers = 8
@@ -121,7 +95,6 @@ func NewRouter(subs subscription.Manager, dests DestinationRegistry, cfg RouterC
 	}
 }
 
-// Start begins the routing workers.
 func (r *Router) Start(ctx context.Context) {
 	for i := 0; i < r.config.Workers; i++ {
 		r.wg.Add(1)
@@ -129,14 +102,11 @@ func (r *Router) Start(ctx context.Context) {
 	}
 }
 
-// Stop gracefully shuts down the router.
 func (r *Router) Stop() {
 	close(r.done)
 	r.wg.Wait()
 }
 
-// Route queues an event for routing.
-// Non-blocking; returns error if queue is full.
 func (r *Router) Route(event *protov1.CanonicalEvent) error {
 	select {
 	case r.eventCh <- event:
@@ -149,13 +119,10 @@ func (r *Router) Route(event *protov1.CanonicalEvent) error {
 	}
 }
 
-// RouteSync routes an event synchronously.
-// Blocks until routing is complete.
 func (r *Router) RouteSync(ctx context.Context, event *protov1.CanonicalEvent) error {
 	return r.routeEvent(ctx, event)
 }
 
-// RouteBatch routes multiple events synchronously.
 func (r *Router) RouteBatch(ctx context.Context, events []*protov1.CanonicalEvent) error {
 	return r.routeBatch(ctx, events)
 }
@@ -170,7 +137,6 @@ func (r *Router) worker(ctx context.Context, id int) {
 	for {
 		select {
 		case <-r.done:
-			// Drain remaining events
 			if len(batch) > 0 {
 				r.routeBatch(ctx, batch)
 			}
@@ -202,10 +168,8 @@ func (r *Router) routeBatch(ctx context.Context, events []*protov1.CanonicalEven
 		return nil
 	}
 
-	// Track match time for profiling
 	matchStart := time.Now()
 
-	// Get all matches in a single call
 	matches, err := r.subscriptions.MatchBatch(ctx, events)
 	if err != nil {
 		r.config.Logger.Error("batch match failed", "error", err)
@@ -214,7 +178,6 @@ func (r *Router) routeBatch(ctx context.Context, events []*protov1.CanonicalEven
 
 	matchDuration := time.Since(matchStart)
 
-	// Group events by destination (client)
 	destEvents := make(map[string][]*protov1.CanonicalEvent)
 
 	for _, event := range events {
@@ -228,10 +191,8 @@ func (r *Router) routeBatch(ctx context.Context, events []*protov1.CanonicalEven
 		}
 	}
 
-	// Track delivery time for profiling
 	deliveryStart := time.Now()
 
-	// Deliver to each destination concurrently
 	var wg sync.WaitGroup
 	for clientID, clientEvents := range destEvents {
 		wg.Add(1)
@@ -244,7 +205,6 @@ func (r *Router) routeBatch(ctx context.Context, events []*protov1.CanonicalEven
 
 	deliveryDuration := time.Since(deliveryStart)
 
-	// Update timing metrics
 	r.mu.Lock()
 	r.eventsRouted += int64(len(events))
 	r.totalMatchTimeNs += matchDuration.Nanoseconds()
@@ -271,7 +231,6 @@ func (r *Router) routeEvent(ctx context.Context, event *protov1.CanonicalEvent) 
 	r.eventsRouted++
 	r.mu.Unlock()
 
-	// Deliver to each matching destination
 	var wg sync.WaitGroup
 	for _, m := range matches {
 		wg.Add(1)
@@ -318,7 +277,6 @@ func (r *Router) deliverToClient(ctx context.Context, clientID string, events []
 	}
 }
 
-// Stats returns current router statistics.
 func (r *Router) Stats() RouterStats {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -333,7 +291,6 @@ func (r *Router) Stats() RouterStats {
 		BatchesProcessed: r.batchesProcessed,
 	}
 
-	// Calculate average times per batch
 	if r.batchesProcessed > 0 {
 		stats.AvgMatchTimeUs = float64(r.totalMatchTimeNs) / float64(r.batchesProcessed) / 1000
 		stats.AvgDeliveryTimeUs = float64(r.totalDeliveryTimeNs) / float64(r.batchesProcessed) / 1000
@@ -342,7 +299,6 @@ func (r *Router) Stats() RouterStats {
 	return stats
 }
 
-// RouterStats contains router performance metrics.
 type RouterStats struct {
 	EventsRouted     int64
 	EventsDropped    int64
@@ -351,18 +307,15 @@ type RouterStats struct {
 	QueueLength      int
 	QueueCapacity    int
 	BatchesProcessed int64
-	// Average time per batch in microseconds
 	AvgMatchTimeUs    float64
 	AvgDeliveryTimeUs float64
 }
 
-// InMemoryDestinationRegistry is a simple in-memory destination registry.
 type InMemoryDestinationRegistry struct {
 	mu    sync.RWMutex
 	dests map[string]Destination
 }
 
-// NewInMemoryDestinationRegistry creates a new in-memory registry.
 func NewInMemoryDestinationRegistry() *InMemoryDestinationRegistry {
 	return &InMemoryDestinationRegistry{
 		dests: make(map[string]Destination),

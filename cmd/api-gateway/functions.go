@@ -14,14 +14,12 @@ import (
 	"github.com/marko911/project-pulse/internal/wasm"
 )
 
-// FunctionAPI handles function registry endpoints.
 type FunctionAPI struct {
 	repo   *storage.FunctionRepository
 	loader *wasm.ModuleLoader
 	server *Server
 }
 
-// NewFunctionAPI creates a new function API handler.
 func NewFunctionAPI(repo *storage.FunctionRepository, loader *wasm.ModuleLoader, server *Server) *FunctionAPI {
 	return &FunctionAPI{
 		repo:   repo,
@@ -30,13 +28,11 @@ func NewFunctionAPI(repo *storage.FunctionRepository, loader *wasm.ModuleLoader,
 	}
 }
 
-// RegisterRoutes registers function API routes.
 func (a *FunctionAPI) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/v1/functions", a.handleFunctions)
 	mux.HandleFunc("/api/v1/functions/", a.handleFunction)
 }
 
-// handleFunctions handles /api/v1/functions (list/create).
 func (a *FunctionAPI) handleFunctions(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
@@ -48,7 +44,6 @@ func (a *FunctionAPI) handleFunctions(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// handleFunction handles /api/v1/functions/{id} and sub-routes.
 func (a *FunctionAPI) handleFunction(w http.ResponseWriter, r *http.Request) {
 	path := strings.TrimPrefix(r.URL.Path, "/api/v1/functions/")
 	parts := strings.Split(path, "/")
@@ -60,7 +55,6 @@ func (a *FunctionAPI) handleFunction(w http.ResponseWriter, r *http.Request) {
 
 	functionID := parts[0]
 
-	// Check for sub-routes
 	if len(parts) > 1 {
 		switch parts[1] {
 		case "deploy":
@@ -79,7 +73,6 @@ func (a *FunctionAPI) handleFunction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Handle function CRUD
 	switch r.Method {
 	case http.MethodGet:
 		a.getFunction(w, r, functionID)
@@ -92,7 +85,6 @@ func (a *FunctionAPI) handleFunction(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// listFunctions returns a paginated list of functions for the tenant.
 func (a *FunctionAPI) listFunctions(w http.ResponseWriter, r *http.Request) {
 	tenantID := r.Header.Get("X-Tenant-ID")
 	if tenantID == "" {
@@ -137,7 +129,6 @@ func (a *FunctionAPI) listFunctions(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// createFunction creates a new function.
 func (a *FunctionAPI) createFunction(w http.ResponseWriter, r *http.Request) {
 	tenantID := r.Header.Get("X-Tenant-ID")
 	if tenantID == "" {
@@ -169,7 +160,6 @@ func (a *FunctionAPI) createFunction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Check if function already exists
 	existing, err := a.repo.GetFunctionByName(r.Context(), tenantID, body.Name)
 	if err != nil {
 		a.server.logger.Error("check existing function error", "error", err)
@@ -186,7 +176,6 @@ func (a *FunctionAPI) createFunction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Set defaults
 	runtimeVersion := body.RuntimeVersion
 	if runtimeVersion == "" {
 		runtimeVersion = "1.0"
@@ -232,7 +221,6 @@ func (a *FunctionAPI) createFunction(w http.ResponseWriter, r *http.Request) {
 	a.writeJSON(w, http.StatusCreated, functionToJSON(f))
 }
 
-// getFunction retrieves a function by ID.
 func (a *FunctionAPI) getFunction(w http.ResponseWriter, r *http.Request, functionID string) {
 	f, err := a.repo.GetFunction(r.Context(), functionID)
 	if err != nil {
@@ -254,7 +242,6 @@ func (a *FunctionAPI) getFunction(w http.ResponseWriter, r *http.Request, functi
 	a.writeJSON(w, http.StatusOK, functionToJSON(f))
 }
 
-// updateFunction updates a function.
 func (a *FunctionAPI) updateFunction(w http.ResponseWriter, r *http.Request, functionID string) {
 	f, err := a.repo.GetFunction(r.Context(), functionID)
 	if err != nil {
@@ -331,7 +318,6 @@ func (a *FunctionAPI) updateFunction(w http.ResponseWriter, r *http.Request, fun
 	a.writeJSON(w, http.StatusOK, functionToJSON(f))
 }
 
-// deleteFunction soft-deletes a function.
 func (a *FunctionAPI) deleteFunction(w http.ResponseWriter, r *http.Request, functionID string) {
 	if err := a.repo.DeleteFunction(r.Context(), functionID); err != nil {
 		if strings.Contains(err.Error(), "not found") {
@@ -356,7 +342,6 @@ func (a *FunctionAPI) deleteFunction(w http.ResponseWriter, r *http.Request, fun
 	})
 }
 
-// handleDeploy handles WASM module deployment.
 func (a *FunctionAPI) handleDeploy(w http.ResponseWriter, r *http.Request, functionID string) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -371,7 +356,6 @@ func (a *FunctionAPI) handleDeploy(w http.ResponseWriter, r *http.Request, funct
 		return
 	}
 
-	// Get function
 	f, err := a.repo.GetFunction(r.Context(), functionID)
 	if err != nil {
 		a.server.logger.Error("get function error", "error", err)
@@ -388,7 +372,6 @@ func (a *FunctionAPI) handleDeploy(w http.ResponseWriter, r *http.Request, funct
 		return
 	}
 
-	// Verify tenant ownership
 	if f.TenantID != tenantID {
 		a.writeJSON(w, http.StatusForbidden, map[string]interface{}{
 			"error": "not authorized to deploy to this function",
@@ -396,7 +379,6 @@ func (a *FunctionAPI) handleDeploy(w http.ResponseWriter, r *http.Request, funct
 		return
 	}
 
-	// Parse multipart form (max 50MB)
 	if err := r.ParseMultipartForm(50 << 20); err != nil {
 		a.writeJSON(w, http.StatusBadRequest, map[string]interface{}{
 			"error": "failed to parse form: " + err.Error(),
@@ -413,7 +395,6 @@ func (a *FunctionAPI) handleDeploy(w http.ResponseWriter, r *http.Request, funct
 	}
 	defer file.Close()
 
-	// Read the WASM module
 	wasmBytes, err := io.ReadAll(file)
 	if err != nil {
 		a.writeJSON(w, http.StatusInternalServerError, map[string]interface{}{
@@ -422,7 +403,6 @@ func (a *FunctionAPI) handleDeploy(w http.ResponseWriter, r *http.Request, funct
 		return
 	}
 
-	// Validate WASM magic number
 	if len(wasmBytes) < 4 || string(wasmBytes[:4]) != "\x00asm" {
 		a.writeJSON(w, http.StatusBadRequest, map[string]interface{}{
 			"error": "invalid WASM module: missing magic header",
@@ -430,11 +410,9 @@ func (a *FunctionAPI) handleDeploy(w http.ResponseWriter, r *http.Request, funct
 		return
 	}
 
-	// Calculate hash
 	hash := sha256.Sum256(wasmBytes)
 	hashStr := hex.EncodeToString(hash[:])
 
-	// Upload to S3/MinIO
 	if a.loader != nil {
 		if err := a.loader.UploadModule(r.Context(), functionID, wasmBytes); err != nil {
 			a.server.logger.Error("upload module error", "error", err)
@@ -445,7 +423,6 @@ func (a *FunctionAPI) handleDeploy(w http.ResponseWriter, r *http.Request, funct
 		}
 	}
 
-	// Get optional deployment note
 	deploymentNote := r.FormValue("note")
 	deployedBy := r.Header.Get("X-User-ID")
 
@@ -457,7 +434,6 @@ func (a *FunctionAPI) handleDeploy(w http.ResponseWriter, r *http.Request, funct
 		deployedByPtr = &deployedBy
 	}
 
-	// Create deployment record
 	modulePath := "functions/" + functionID + "/module.wasm"
 	deployment := &storage.Deployment{
 		FunctionID:     functionID,
@@ -499,7 +475,6 @@ func (a *FunctionAPI) handleDeploy(w http.ResponseWriter, r *http.Request, funct
 	})
 }
 
-// handleTriggers handles trigger management for a function.
 func (a *FunctionAPI) handleTriggers(w http.ResponseWriter, r *http.Request, functionID string) {
 	switch r.Method {
 	case http.MethodGet:
@@ -541,7 +516,6 @@ func (a *FunctionAPI) createTrigger(w http.ResponseWriter, r *http.Request, func
 		return
 	}
 
-	// Verify function exists
 	f, err := a.repo.GetFunction(r.Context(), functionID)
 	if err != nil || f == nil {
 		a.writeJSON(w, http.StatusNotFound, map[string]interface{}{
@@ -576,7 +550,6 @@ func (a *FunctionAPI) createTrigger(w http.ResponseWriter, r *http.Request, func
 		return
 	}
 
-	// Set defaults
 	priority := body.Priority
 	if priority == 0 {
 		priority = 100
@@ -622,7 +595,6 @@ func (a *FunctionAPI) createTrigger(w http.ResponseWriter, r *http.Request, func
 	a.writeJSON(w, http.StatusCreated, triggerToJSON(t))
 }
 
-// handleDeployments lists deployment history.
 func (a *FunctionAPI) handleDeployments(w http.ResponseWriter, r *http.Request, functionID string) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -656,14 +628,12 @@ func (a *FunctionAPI) handleDeployments(w http.ResponseWriter, r *http.Request, 
 	})
 }
 
-// handleStats returns invocation statistics.
 func (a *FunctionAPI) handleStats(w http.ResponseWriter, r *http.Request, functionID string) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
 
-	// Default to last 24 hours
 	since := time.Now().Add(-24 * time.Hour)
 	if v := r.URL.Query().Get("since"); v != "" {
 		if t, err := time.Parse(time.RFC3339, v); err == nil {
@@ -692,7 +662,6 @@ func (a *FunctionAPI) handleStats(w http.ResponseWriter, r *http.Request, functi
 	})
 }
 
-// handleLogs returns invocation logs for a function.
 func (a *FunctionAPI) handleLogs(w http.ResponseWriter, r *http.Request, functionID string) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -735,7 +704,6 @@ func (a *FunctionAPI) handleLogs(w http.ResponseWriter, r *http.Request, functio
 	})
 }
 
-// writeJSON writes a JSON response.
 func (a *FunctionAPI) writeJSON(w http.ResponseWriter, status int, data interface{}) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
@@ -744,7 +712,6 @@ func (a *FunctionAPI) writeJSON(w http.ResponseWriter, status int, data interfac
 	}
 }
 
-// functionToJSON converts a Function to a JSON-friendly map.
 func functionToJSON(f *storage.Function) map[string]interface{} {
 	result := map[string]interface{}{
 		"id":              f.ID,
@@ -770,7 +737,6 @@ func functionToJSON(f *storage.Function) map[string]interface{} {
 	return result
 }
 
-// triggerToJSON converts a Trigger to a JSON-friendly map.
 func triggerToJSON(t *storage.Trigger) map[string]interface{} {
 	result := map[string]interface{}{
 		"id":          t.ID,
@@ -800,7 +766,6 @@ func triggerToJSON(t *storage.Trigger) map[string]interface{} {
 	return result
 }
 
-// deploymentToJSON converts a Deployment to a JSON-friendly map.
 func deploymentToJSON(d *storage.Deployment) map[string]interface{} {
 	result := map[string]interface{}{
 		"id":          d.ID,
@@ -828,7 +793,6 @@ func deploymentToJSON(d *storage.Deployment) map[string]interface{} {
 	return result
 }
 
-// invocationToJSON converts an Invocation to a JSON-friendly map.
 func invocationToJSON(inv *storage.Invocation) map[string]interface{} {
 	result := map[string]interface{}{
 		"id":            inv.ID,
@@ -868,7 +832,6 @@ func invocationToJSON(inv *storage.Invocation) map[string]interface{} {
 	return result
 }
 
-// handleTriggersRoot handles /api/v1/triggers (list all triggers for tenant).
 func (a *FunctionAPI) handleTriggersRoot(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -918,7 +881,6 @@ func (a *FunctionAPI) handleTriggersRoot(w http.ResponseWriter, r *http.Request)
 	})
 }
 
-// handleTriggerByID handles /api/v1/triggers/{id} (get/update/delete trigger).
 func (a *FunctionAPI) handleTriggerByID(w http.ResponseWriter, r *http.Request) {
 	triggerID := strings.TrimPrefix(r.URL.Path, "/api/v1/triggers/")
 	if triggerID == "" {
@@ -938,7 +900,6 @@ func (a *FunctionAPI) handleTriggerByID(w http.ResponseWriter, r *http.Request) 
 	}
 }
 
-// getTrigger retrieves a trigger by ID.
 func (a *FunctionAPI) getTrigger(w http.ResponseWriter, r *http.Request, triggerID string) {
 	t, err := a.repo.GetTrigger(r.Context(), triggerID)
 	if err != nil {
@@ -960,7 +921,6 @@ func (a *FunctionAPI) getTrigger(w http.ResponseWriter, r *http.Request, trigger
 	a.writeJSON(w, http.StatusOK, triggerToJSON(t))
 }
 
-// updateTrigger updates a trigger.
 func (a *FunctionAPI) updateTrigger(w http.ResponseWriter, r *http.Request, triggerID string) {
 	tenantID := r.Header.Get("X-Tenant-ID")
 	if tenantID == "" {
@@ -987,7 +947,6 @@ func (a *FunctionAPI) updateTrigger(w http.ResponseWriter, r *http.Request, trig
 		return
 	}
 
-	// Verify tenant ownership
 	if t.TenantID != tenantID {
 		a.writeJSON(w, http.StatusForbidden, map[string]interface{}{
 			"error": "not authorized to update this trigger",
@@ -1015,7 +974,6 @@ func (a *FunctionAPI) updateTrigger(w http.ResponseWriter, r *http.Request, trig
 		return
 	}
 
-	// Apply updates
 	if body.Name != nil {
 		t.Name = *body.Name
 	}
@@ -1070,7 +1028,6 @@ func (a *FunctionAPI) updateTrigger(w http.ResponseWriter, r *http.Request, trig
 	a.writeJSON(w, http.StatusOK, triggerToJSON(t))
 }
 
-// deleteTrigger deletes a trigger.
 func (a *FunctionAPI) deleteTrigger(w http.ResponseWriter, r *http.Request, triggerID string) {
 	tenantID := r.Header.Get("X-Tenant-ID")
 	if tenantID == "" {
@@ -1080,7 +1037,6 @@ func (a *FunctionAPI) deleteTrigger(w http.ResponseWriter, r *http.Request, trig
 		return
 	}
 
-	// Verify the trigger exists and belongs to the tenant
 	t, err := a.repo.GetTrigger(r.Context(), triggerID)
 	if err != nil {
 		a.server.logger.Error("get trigger error", "error", err)
@@ -1098,7 +1054,6 @@ func (a *FunctionAPI) deleteTrigger(w http.ResponseWriter, r *http.Request, trig
 		return
 	}
 
-	// Verify tenant ownership
 	if t.TenantID != tenantID {
 		a.writeJSON(w, http.StatusForbidden, map[string]interface{}{
 			"error": "not authorized to delete this trigger",

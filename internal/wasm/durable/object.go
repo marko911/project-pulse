@@ -1,11 +1,3 @@
-// Package durable implements Durable Objects - single-threaded actors with persistent state.
-//
-// Durable Objects provide:
-// - Strong consistency: All reads and writes to state are transactional
-// - Single-execution: Only one instance of each object runs at a time
-// - Persistent state: State survives restarts and is stored in Redis
-//
-// This is inspired by Cloudflare's Durable Objects but implemented with Redis.
 package durable
 
 import (
@@ -18,32 +10,26 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
-// Redis key patterns
 const (
-	keyDOLock   = "do:lock:"   // do:lock:{namespace}:{id} -> lock holder
-	keyDOState  = "do:state:"  // do:state:{namespace}:{id} -> state JSON
-	keyDOAlarm  = "do:alarm:"  // do:alarm:{namespace}:{id} -> alarm timestamp
-	keyDOTenants = "do:tenants:" // do:tenants:{namespace}:{id} -> tenant ID
+	keyDOLock   = "do:lock:"
+	keyDOState  = "do:state:"
+	keyDOAlarm  = "do:alarm:"
+	keyDOTenants = "do:tenants:"
 )
 
-// Config holds configuration for the Durable Object runtime.
 type Config struct {
 	RedisAddr     string
 	RedisPassword string
 	RedisDB       int
 	KeyPrefix     string
 
-	// LockTimeout is how long a lock can be held before expiring
 	LockTimeout time.Duration
 
-	// LockRetryInterval is how often to retry acquiring a lock
 	LockRetryInterval time.Duration
 
-	// MaxLockRetries is the maximum number of lock acquisition attempts
 	MaxLockRetries int
 }
 
-// DefaultConfig returns a Config with sensible defaults.
 func DefaultConfig() Config {
 	return Config{
 		RedisAddr:         "localhost:6379",
@@ -53,16 +39,13 @@ func DefaultConfig() Config {
 	}
 }
 
-// Runtime manages Durable Object instances.
 type Runtime struct {
 	cfg    Config
 	client *redis.Client
 
-	// Local cache of active objects (for single-node optimization)
-	objects sync.Map // objectKey -> *Object
+	objects sync.Map
 }
 
-// NewRuntime creates a new Durable Object runtime.
 func NewRuntime(cfg Config) (*Runtime, error) {
 	client := redis.NewClient(&redis.Options{
 		Addr:     cfg.RedisAddr,
@@ -83,12 +66,9 @@ func NewRuntime(cfg Config) (*Runtime, error) {
 	}, nil
 }
 
-// Get returns or creates a Durable Object instance.
-// The object is locked for exclusive access until Close() is called.
 func (r *Runtime) Get(ctx context.Context, namespace, id, tenantID string) (*Object, error) {
 	key := r.objectKey(namespace, id)
 
-	// Try to acquire the lock
 	lockKey := r.lockKey(namespace, id)
 	lockValue := generateLockID()
 
@@ -100,7 +80,6 @@ func (r *Runtime) Get(ctx context.Context, namespace, id, tenantID string) (*Obj
 		return nil, ErrObjectLocked
 	}
 
-	// Verify tenant access
 	existingTenant, err := r.getTenantID(ctx, namespace, id)
 	if err != nil {
 		r.releaseLock(ctx, lockKey, lockValue)
@@ -111,7 +90,6 @@ func (r *Runtime) Get(ctx context.Context, namespace, id, tenantID string) (*Obj
 		return nil, ErrTenantMismatch
 	}
 
-	// Set tenant if not set
 	if existingTenant == "" {
 		if err := r.setTenantID(ctx, namespace, id, tenantID); err != nil {
 			r.releaseLock(ctx, lockKey, lockValue)
@@ -119,7 +97,6 @@ func (r *Runtime) Get(ctx context.Context, namespace, id, tenantID string) (*Obj
 		}
 	}
 
-	// Load existing state
 	state, err := r.loadState(ctx, namespace, id)
 	if err != nil {
 		r.releaseLock(ctx, lockKey, lockValue)
@@ -163,7 +140,6 @@ func (r *Runtime) alarmKey(namespace, id string) string {
 
 func (r *Runtime) acquireLock(ctx context.Context, key, value string) (bool, error) {
 	for i := 0; i < r.cfg.MaxLockRetries; i++ {
-		// Try to set the lock with NX (only if not exists)
 		ok, err := r.client.SetNX(ctx, key, value, r.cfg.LockTimeout).Result()
 		if err != nil {
 			return false, err
@@ -172,7 +148,6 @@ func (r *Runtime) acquireLock(ctx context.Context, key, value string) (bool, err
 			return true, nil
 		}
 
-		// Lock exists, wait and retry
 		select {
 		case <-ctx.Done():
 			return false, ctx.Err()
@@ -184,7 +159,6 @@ func (r *Runtime) acquireLock(ctx context.Context, key, value string) (bool, err
 }
 
 func (r *Runtime) releaseLock(ctx context.Context, key, value string) error {
-	// Only release if we still hold the lock (Lua script for atomicity)
 	script := redis.NewScript(`
 		if redis.call("get", KEYS[1]) == ARGV[1] then
 			return redis.call("del", KEYS[1])
@@ -198,7 +172,6 @@ func (r *Runtime) releaseLock(ctx context.Context, key, value string) error {
 }
 
 func (r *Runtime) extendLock(ctx context.Context, key, value string) error {
-	// Extend lock TTL if we still hold it
 	script := redis.NewScript(`
 		if redis.call("get", KEYS[1]) == ARGV[1] then
 			return redis.call("pexpire", KEYS[1], ARGV[2])
@@ -254,7 +227,6 @@ func (r *Runtime) saveState(ctx context.Context, namespace, id string, state map
 	return r.client.Set(ctx, key, data, 0).Err()
 }
 
-// Close releases resources.
 func (r *Runtime) Close() error {
 	return r.client.Close()
 }

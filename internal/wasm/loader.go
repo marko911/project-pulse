@@ -12,7 +12,6 @@ import (
 	"github.com/minio/minio-go/v7/pkg/credentials"
 )
 
-// LoaderConfig contains configuration for the module loader.
 type LoaderConfig struct {
 	Endpoint  string
 	Bucket    string
@@ -21,19 +20,16 @@ type LoaderConfig struct {
 	UseSSL    bool
 }
 
-// ModuleLoader loads WASM modules from S3/MinIO.
 type ModuleLoader struct {
 	cfg     LoaderConfig
 	client  *minio.Client
 	runtime *Runtime
 	logger  *slog.Logger
 
-	// Local cache of loaded modules
 	cacheMu sync.RWMutex
 	cache   map[string][]byte
 }
 
-// NewModuleLoader creates a new module loader.
 func NewModuleLoader(cfg LoaderConfig, logger *slog.Logger) (*ModuleLoader, error) {
 	client, err := minio.New(cfg.Endpoint, &minio.Options{
 		Creds:  credentials.NewStaticV4(cfg.AccessKey, cfg.SecretKey, ""),
@@ -51,17 +47,13 @@ func NewModuleLoader(cfg LoaderConfig, logger *slog.Logger) (*ModuleLoader, erro
 	}, nil
 }
 
-// SetRuntime sets the runtime for module compilation.
 func (l *ModuleLoader) SetRuntime(runtime *Runtime) {
 	l.runtime = runtime
 }
 
-// Load loads and compiles a WASM module by function ID.
 func (l *ModuleLoader) Load(ctx context.Context, functionID string) (*CompiledModule, error) {
-	// Construct the object key (e.g., "functions/{functionID}/module.wasm")
 	objectKey := fmt.Sprintf("functions/%s/module.wasm", functionID)
 
-	// Check if already compiled in runtime cache
 	if l.runtime != nil {
 		l.runtime.cacheMu.RLock()
 		if cached, ok := l.runtime.cache[functionID]; ok {
@@ -71,13 +63,11 @@ func (l *ModuleLoader) Load(ctx context.Context, functionID string) (*CompiledMo
 		l.runtime.cacheMu.RUnlock()
 	}
 
-	// Check local byte cache
 	l.cacheMu.RLock()
 	wasmBytes, cached := l.cache[functionID]
 	l.cacheMu.RUnlock()
 
 	if !cached {
-		// Download from S3/MinIO
 		l.logger.Debug("downloading module from storage",
 			"function_id", functionID,
 			"bucket", l.cfg.Bucket,
@@ -97,13 +87,11 @@ func (l *ModuleLoader) Load(ctx context.Context, functionID string) (*CompiledMo
 
 		wasmBytes = buf.Bytes()
 
-		// Cache the bytes
 		l.cacheMu.Lock()
 		l.cache[functionID] = wasmBytes
 		l.cacheMu.Unlock()
 	}
 
-	// Compile the module
 	if l.runtime == nil {
 		return nil, fmt.Errorf("runtime not set on loader")
 	}
@@ -111,7 +99,6 @@ func (l *ModuleLoader) Load(ctx context.Context, functionID string) (*CompiledMo
 	return l.runtime.Compile(functionID, wasmBytes)
 }
 
-// Preload downloads and caches a module without compiling.
 func (l *ModuleLoader) Preload(ctx context.Context, functionID string) error {
 	objectKey := fmt.Sprintf("functions/%s/module.wasm", functionID)
 
@@ -139,7 +126,6 @@ func (l *ModuleLoader) Preload(ctx context.Context, functionID string) error {
 	return nil
 }
 
-// Invalidate removes a module from the cache.
 func (l *ModuleLoader) Invalidate(functionID string) {
 	l.cacheMu.Lock()
 	delete(l.cache, functionID)
@@ -154,7 +140,6 @@ func (l *ModuleLoader) Invalidate(functionID string) {
 	l.logger.Debug("invalidated module cache", "function_id", functionID)
 }
 
-// ListFunctions lists available functions in the bucket.
 func (l *ModuleLoader) ListFunctions(ctx context.Context) ([]string, error) {
 	var functions []string
 
@@ -167,9 +152,8 @@ func (l *ModuleLoader) ListFunctions(ctx context.Context) ([]string, error) {
 		if obj.Err != nil {
 			return nil, fmt.Errorf("failed to list objects: %w", obj.Err)
 		}
-		// Extract function ID from path like "functions/{id}/"
 		if len(obj.Key) > 10 {
-			funcID := obj.Key[10 : len(obj.Key)-1] // Remove "functions/" prefix and trailing "/"
+			funcID := obj.Key[10 : len(obj.Key)-1]
 			functions = append(functions, funcID)
 		}
 	}
@@ -177,7 +161,6 @@ func (l *ModuleLoader) ListFunctions(ctx context.Context) ([]string, error) {
 	return functions, nil
 }
 
-// UploadModule uploads a WASM module to storage.
 func (l *ModuleLoader) UploadModule(ctx context.Context, functionID string, wasmBytes []byte) error {
 	objectKey := fmt.Sprintf("functions/%s/module.wasm", functionID)
 
@@ -193,7 +176,6 @@ func (l *ModuleLoader) UploadModule(ctx context.Context, functionID string, wasm
 		"size", len(wasmBytes),
 	)
 
-	// Invalidate any cached version
 	l.Invalidate(functionID)
 
 	return nil

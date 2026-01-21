@@ -111,11 +111,10 @@ func TestManifestRecord_ToProto_InvalidJSON(t *testing.T) {
 }
 
 func TestManifestRecord_Mismatch(t *testing.T) {
-	// Test detecting correctness mismatch
 	record := &ManifestRecord{
 		ExpectedTxCount:    100,
 		ExpectedEventCount: 250,
-		EmittedTxCount:     99, // Mismatch!
+		EmittedTxCount:     99,
 		EmittedEventCount:  250,
 	}
 

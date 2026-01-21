@@ -11,13 +11,10 @@ import (
 	pnats "github.com/marko911/project-pulse/internal/platform/nats"
 )
 
-// TestNATSIntegration tests NATS JetStream connectivity and basic operations.
-// Run with: go test -tags=integration ./internal/platform/nats/... -v
 func TestNATSIntegration(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	// Connect to NATS
 	cfg := pnats.DefaultConfig()
 	cfg.URL = "nats://localhost:4222"
 	cfg.Name = "integration-test"
@@ -30,7 +27,6 @@ func TestNATSIntegration(t *testing.T) {
 
 	t.Log("Successfully connected to NATS")
 
-	// Create stream for canonical events
 	streamCfg := pnats.DefaultCanonicalEventsStreamConfig()
 	stream, err := pnats.EnsureStream(ctx, client.JetStream(), streamCfg)
 	if err != nil {
@@ -39,7 +35,6 @@ func TestNATSIntegration(t *testing.T) {
 
 	t.Logf("Created stream: %s", streamCfg.Name)
 
-	// Create consumer
 	consumerCfg := pnats.DefaultFanoutConsumerConfig("integration-test-consumer")
 	consumer, err := pnats.EnsureConsumer(ctx, stream, consumerCfg)
 	if err != nil {
@@ -48,7 +43,6 @@ func TestNATSIntegration(t *testing.T) {
 
 	t.Logf("Created consumer: %s", consumerCfg.Name)
 
-	// Publish a test event
 	testEvent := map[string]interface{}{
 		"event_id":   "test-event-001",
 		"chain":      "solana",
@@ -70,7 +64,6 @@ func TestNATSIntegration(t *testing.T) {
 
 	t.Logf("Published event to %s, seq=%d", subject, ack.Sequence)
 
-	// Consume the message
 	msgs, err := consumer.Fetch(1)
 	if err != nil {
 		t.Fatalf("Failed to fetch messages: %v", err)

@@ -23,22 +23,17 @@ func main() {
 	flag.StringVar(&cfg.DBConnString, "db", "", "PostgreSQL connection string")
 	flag.DurationVar(&cfg.ReadTimeout, "read-timeout", 10*time.Second, "HTTP read timeout")
 	flag.DurationVar(&cfg.WriteTimeout, "write-timeout", 10*time.Second, "HTTP write timeout")
-	// NATS JetStream configuration
 	flag.BoolVar(&cfg.NATSEnabled, "nats-enabled", envOrDefaultBool("NATS_ENABLED", true), "Enable NATS JetStream consumer")
 	flag.StringVar(&cfg.NATSURL, "nats-url", envOrDefault("NATS_URL", "nats://localhost:4222"), "NATS server URL")
 	flag.StringVar(&cfg.NATSConsumerName, "nats-consumer", envOrDefault("NATS_CONSUMER_NAME", uniqueConsumerName()), "NATS consumer name (must be unique per instance for fanout)")
-	// Redis configuration
 	flag.StringVar(&cfg.RedisAddr, "redis-addr", envOrDefault("REDIS_ADDR", "localhost:6379"), "Redis server address")
 	flag.StringVar(&cfg.RedisPassword, "redis-password", envOrDefault("REDIS_PASSWORD", ""), "Redis password")
 	flag.IntVar(&cfg.RedisDB, "redis-db", envOrDefaultInt("REDIS_DB", 0), "Redis database number")
-	// WebSocket security
 	wsOrigins := flag.String("ws-allowed-origins", envOrDefault("WS_ALLOWED_ORIGINS", "*"), "Comma-separated list of allowed WebSocket origins, or '*' for all")
 	flag.Parse()
 
-	// Parse allowed origins
 	cfg.AllowedOrigins = parseOrigins(*wsOrigins)
 
-	// Override with environment variables if set
 	if v := os.Getenv("API_LISTEN_ADDR"); v != "" {
 		cfg.ListenAddr = v
 	}
@@ -56,21 +51,17 @@ func main() {
 	}
 }
 
-// Config holds configuration for the API gateway.
 type Config struct {
 	ListenAddr   string
 	DBConnString string
 	ReadTimeout  time.Duration
 	WriteTimeout time.Duration
-	// NATS JetStream configuration
 	NATSEnabled      bool
 	NATSURL          string
 	NATSConsumerName string
-	// Redis configuration for subscription storage
 	RedisAddr     string
 	RedisPassword string
 	RedisDB       int
-	// WebSocket security configuration
 	AllowedOrigins []string
 }
 
@@ -78,10 +69,8 @@ func run(cfg Config, logger *slog.Logger) error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	// Create server with handlers
 	server := NewServer(cfg, logger)
 
-	// Initialize Redis subscription manager for WebSocket subscription storage
 	subManager, err := subscription.NewRedisManager(subscription.RedisConfig{
 		Addr:       cfg.RedisAddr,
 		Password:   cfg.RedisPassword,
@@ -92,7 +81,6 @@ func run(cfg Config, logger *slog.Logger) error {
 	if err != nil {
 		logger.Warn("Redis subscription manager initialization failed, WebSocket subscriptions disabled", "error", err)
 	} else {
-		// Create WebSocket handler with subscription manager and allowed origins
 		wsHandler := NewWebSocketHandler(subManager, cfg.AllowedOrigins, logger)
 		server.SetWebSocketHandler(wsHandler)
 		logger.Info("WebSocket subscription system initialized",
@@ -101,7 +89,6 @@ func run(cfg Config, logger *slog.Logger) error {
 		)
 	}
 
-	// Set up NATS consumer for WebSocket fanout (if enabled)
 	var natsConsumer *NATSConsumer
 	if cfg.NATSEnabled {
 		consumer, err := NewNATSConsumer(ctx, NATSConsumerConfig{
@@ -109,7 +96,6 @@ func run(cfg Config, logger *slog.Logger) error {
 			ConsumerName: cfg.NATSConsumerName,
 			Logger:       logger.With("component", "nats-consumer"),
 			OnEvent: func(event *protov1.CanonicalEvent) error {
-				// Route event to WebSocket clients via the server's router
 				server.HandleNATSEvent(event)
 				return nil
 			},
@@ -129,7 +115,6 @@ func run(cfg Config, logger *slog.Logger) error {
 		}
 	}
 
-	// Set up HTTP server
 	httpServer := &http.Server{
 		Addr:         cfg.ListenAddr,
 		Handler:      server.Router(),
@@ -137,7 +122,6 @@ func run(cfg Config, logger *slog.Logger) error {
 		WriteTimeout: cfg.WriteTimeout,
 	}
 
-	// Handle shutdown signals
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 
@@ -148,7 +132,6 @@ func run(cfg Config, logger *slog.Logger) error {
 		shutdownCtx, shutdownCancel := context.WithTimeout(ctx, 30*time.Second)
 		defer shutdownCancel()
 
-		// Shutdown NATS consumer first
 		if natsConsumer != nil {
 			if err := natsConsumer.Close(); err != nil {
 				logger.Error("NATS consumer shutdown error", "error", err)
@@ -169,7 +152,6 @@ func run(cfg Config, logger *slog.Logger) error {
 	return nil
 }
 
-// envOrDefault returns the environment variable value or a default if not set.
 func envOrDefault(key, defaultVal string) string {
 	if v := os.Getenv(key); v != "" {
 		return v
@@ -177,7 +159,6 @@ func envOrDefault(key, defaultVal string) string {
 	return defaultVal
 }
 
-// envOrDefaultBool returns the environment variable value as a bool or a default if not set.
 func envOrDefaultBool(key string, defaultVal bool) bool {
 	if v := os.Getenv(key); v != "" {
 		if b, err := strconv.ParseBool(v); err == nil {
@@ -187,7 +168,6 @@ func envOrDefaultBool(key string, defaultVal bool) bool {
 	return defaultVal
 }
 
-// envOrDefaultInt returns the environment variable value as an int or a default if not set.
 func envOrDefaultInt(key string, defaultVal int) int {
 	if v := os.Getenv(key); v != "" {
 		if i, err := strconv.Atoi(v); err == nil {
@@ -197,25 +177,18 @@ func envOrDefaultInt(key string, defaultVal int) int {
 	return defaultVal
 }
 
-// uniqueConsumerName generates a unique NATS consumer name for this instance.
-// Each api-gateway instance needs a unique consumer name to receive ALL events
-// (fanout pattern). If instances share the same consumer name, events are
-// load-balanced instead of fanned out, causing message loss.
 func uniqueConsumerName() string {
 	hostname, err := os.Hostname()
 	if err != nil {
-		// Fallback to timestamp-based name
 		return fmt.Sprintf("api-gateway-%d", time.Now().UnixNano())
 	}
 	return fmt.Sprintf("api-gateway-%s", hostname)
 }
 
-// parseOrigins parses a comma-separated list of allowed origins.
-// Returns nil if "*" is specified (allow all origins).
 func parseOrigins(origins string) []string {
 	origins = strings.TrimSpace(origins)
 	if origins == "" || origins == "*" {
-		return nil // nil means allow all origins
+		return nil
 	}
 
 	parts := strings.Split(origins, ",")

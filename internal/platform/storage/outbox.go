@@ -11,35 +11,26 @@ import (
 	protov1 "github.com/marko911/project-pulse/pkg/proto/v1"
 )
 
-// OutboxRepository handles persistence of events and outbox messages.
 type OutboxRepository struct {
 	db *DB
 }
 
-// NewOutboxRepository creates a new OutboxRepository.
 func NewOutboxRepository(db *DB) *OutboxRepository {
 	return &OutboxRepository{db: db}
 }
 
-// SaveEventWithOutbox atomically saves a canonical event and its outbox message.
-// This is the core of the transactional outbox pattern - both records are written
-// in a single transaction to guarantee exactly-once delivery semantics.
 func (r *OutboxRepository) SaveEventWithOutbox(ctx context.Context, event *protov1.CanonicalEvent, topic string) error {
 	return r.db.WithTx(ctx, func(tx pgx.Tx) error {
-		// Convert accounts slice to JSON for storage
 		accountsJSON, err := json.Marshal(event.Accounts)
 		if err != nil {
 			return fmt.Errorf("marshal accounts: %w", err)
 		}
 
-		// Serialize the full event for the outbox payload
-		// In production, this would use protobuf serialization
 		payloadJSON, err := json.Marshal(event)
 		if err != nil {
 			return fmt.Errorf("marshal payload: %w", err)
 		}
 
-		// Insert or update the event
 		eventSQL := `
 			INSERT INTO events (
 				event_id, chain, block_number, block_hash, block_timestamp,
@@ -93,14 +84,12 @@ func (r *OutboxRepository) SaveEventWithOutbox(ctx context.Context, event *proto
 			return fmt.Errorf("insert event: %w", err)
 		}
 
-		// Insert the outbox message
 		outboxSQL := `
 			INSERT INTO outbox (
 				event_id, topic, partition_key, payload, chain, event_type
 			) VALUES ($1, $2, $3, $4, $5, $6)
 		`
 
-		// Partition key ensures ordering within a chain
 		partitionKey := fmt.Sprintf("%d:%d", event.Chain, event.BlockNumber)
 
 		_, err = tx.Exec(ctx, outboxSQL,
@@ -119,8 +108,6 @@ func (r *OutboxRepository) SaveEventWithOutbox(ctx context.Context, event *proto
 	})
 }
 
-// SaveBatchWithOutbox atomically saves multiple events with their outbox messages.
-// All events are written in a single transaction.
 func (r *OutboxRepository) SaveBatchWithOutbox(ctx context.Context, events []*protov1.CanonicalEvent, topic string) error {
 	if len(events) == 0 {
 		return nil
@@ -148,7 +135,6 @@ func (r *OutboxRepository) SaveBatchWithOutbox(ctx context.Context, events []*pr
 				replacesEventID = &event.ReplacesEventId
 			}
 
-			// Upsert event
 			eventSQL := `
 				INSERT INTO events (
 					event_id, chain, block_number, block_hash, block_timestamp,
@@ -192,7 +178,6 @@ func (r *OutboxRepository) SaveBatchWithOutbox(ctx context.Context, events []*pr
 				return fmt.Errorf("insert event %s: %w", event.EventId, err)
 			}
 
-			// Insert outbox message
 			outboxSQL := `
 				INSERT INTO outbox (
 					event_id, topic, partition_key, payload, chain, event_type
@@ -218,8 +203,6 @@ func (r *OutboxRepository) SaveBatchWithOutbox(ctx context.Context, events []*pr
 	})
 }
 
-// FetchPendingMessages retrieves pending outbox messages for publishing.
-// Messages are returned in order by ID to maintain strict ordering.
 func (r *OutboxRepository) FetchPendingMessages(ctx context.Context, limit int) ([]OutboxMessage, error) {
 	sql := `
 		SELECT id, event_id, topic, partition_key, payload, chain, event_type,
@@ -254,8 +237,6 @@ func (r *OutboxRepository) FetchPendingMessages(ctx context.Context, limit int) 
 	return messages, rows.Err()
 }
 
-// MarkAsProcessing atomically marks messages as processing.
-// Returns the IDs that were successfully claimed (handles concurrent workers).
 func (r *OutboxRepository) MarkAsProcessing(ctx context.Context, ids []int64) ([]int64, error) {
 	if len(ids) == 0 {
 		return nil, nil
@@ -286,7 +267,6 @@ func (r *OutboxRepository) MarkAsProcessing(ctx context.Context, ids []int64) ([
 	return claimed, rows.Err()
 }
 
-// MarkAsPublished marks messages as successfully published.
 func (r *OutboxRepository) MarkAsPublished(ctx context.Context, ids []int64) error {
 	if len(ids) == 0 {
 		return nil
@@ -306,7 +286,6 @@ func (r *OutboxRepository) MarkAsPublished(ctx context.Context, ids []int64) err
 	return nil
 }
 
-// MarkAsFailed marks messages as failed with an error message.
 func (r *OutboxRepository) MarkAsFailed(ctx context.Context, id int64, errMsg string) error {
 	sql := `
 		UPDATE outbox
@@ -328,7 +307,6 @@ func (r *OutboxRepository) MarkAsFailed(ctx context.Context, id int64, errMsg st
 	return nil
 }
 
-// GetEventByID retrieves an event by its ID.
 func (r *OutboxRepository) GetEventByID(ctx context.Context, eventID string) (*EventRecord, error) {
 	sql := `
 		SELECT event_id, chain, block_number, block_hash, block_timestamp,
@@ -356,7 +334,6 @@ func (r *OutboxRepository) GetEventByID(ctx context.Context, eventID string) (*E
 	return &event, nil
 }
 
-// GetEventsByBlock retrieves all events for a specific block.
 func (r *OutboxRepository) GetEventsByBlock(ctx context.Context, chain int16, blockNumber int64) ([]EventRecord, error) {
 	sql := `
 		SELECT event_id, chain, block_number, block_hash, block_timestamp,

@@ -14,39 +14,32 @@ import (
 )
 
 const (
-	// Redis key prefixes
-	keySubscription   = "sub:"           // sub:{id} -> Subscription JSON
-	keyClientSubs     = "client:subs:"   // client:subs:{clientID} -> SET of sub IDs
-	keyChainIndex     = "idx:chain:"     // idx:chain:{chain} -> SET of sub IDs
-	keyAccountIndex   = "idx:account:"   // idx:account:{account} -> SET of sub IDs
-	keyEventTypeIndex = "idx:eventtype:" // idx:eventtype:{type} -> SET of sub IDs
-	keyProgramIndex   = "idx:program:"   // idx:program:{programId} -> SET of sub IDs
-	keyWildcardSubs   = "idx:wildcard"   // SET of sub IDs with no specific filters (match all)
-	keyExpirations    = "sub:expirations" // ZSET of sub IDs with expiration timestamps
+	keySubscription   = "sub:"
+	keyClientSubs     = "client:subs:"
+	keyChainIndex     = "idx:chain:"
+	keyAccountIndex   = "idx:account:"
+	keyEventTypeIndex = "idx:eventtype:"
+	keyProgramIndex   = "idx:program:"
+	keyWildcardSubs   = "idx:wildcard"
+	keyExpirations    = "sub:expirations"
 )
 
-// RedisConfig holds configuration for the Redis subscription manager.
 type RedisConfig struct {
-	// Redis client options
 	Addr     string
 	Password string
 	DB       int
 
-	// KeyPrefix allows namespacing keys (e.g., "prod:", "staging:")
 	KeyPrefix string
 
-	// DefaultTTL sets the default subscription expiration (0 = no expiration)
 	DefaultTTL time.Duration
 }
 
-// RedisManager implements Manager using Redis for storage.
 type RedisManager struct {
 	client    *redis.Client
 	keyPrefix string
 	defaultTTL time.Duration
 }
 
-// NewRedisManager creates a new Redis-backed subscription manager.
 func NewRedisManager(cfg RedisConfig) (*RedisManager, error) {
 	client := redis.NewClient(&redis.Options{
 		Addr:     cfg.Addr,
@@ -54,7 +47,6 @@ func NewRedisManager(cfg RedisConfig) (*RedisManager, error) {
 		DB:       cfg.DB,
 	})
 
-	// Verify connection
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
@@ -69,7 +61,6 @@ func NewRedisManager(cfg RedisConfig) (*RedisManager, error) {
 	}, nil
 }
 
-// NewRedisManagerWithClient creates a manager using an existing Redis client.
 func NewRedisManagerWithClient(client *redis.Client, keyPrefix string) *RedisManager {
 	return &RedisManager{
 		client:    client,
@@ -85,7 +76,6 @@ func (m *RedisManager) key(parts ...string) string {
 	return result
 }
 
-// Subscribe creates or updates a subscription.
 func (m *RedisManager) Subscribe(ctx context.Context, sub *Subscription) (string, error) {
 	if sub.ID == "" {
 		sub.ID = generateSubscriptionID()
@@ -94,26 +84,20 @@ func (m *RedisManager) Subscribe(ctx context.Context, sub *Subscription) (string
 		sub.CreatedAt = time.Now()
 	}
 
-	// Serialize subscription
 	data, err := json.Marshal(sub)
 	if err != nil {
 		return "", fmt.Errorf("marshal subscription: %w", err)
 	}
 
-	// Use pipeline for atomic operations
 	pipe := m.client.TxPipeline()
 
-	// Store subscription
 	subKey := m.key(keySubscription, sub.ID)
 	pipe.Set(ctx, subKey, data, 0)
 
-	// Add to client's subscription set
 	pipe.SAdd(ctx, m.key(keyClientSubs, sub.ClientID), sub.ID)
 
-	// Build indexes for efficient matching
 	m.addIndexes(ctx, pipe, sub)
 
-	// Handle expiration
 	if !sub.ExpiresAt.IsZero() {
 		pipe.ZAdd(ctx, m.key(keyExpirations), redis.Z{
 			Score:  float64(sub.ExpiresAt.Unix()),
@@ -132,48 +116,40 @@ func (m *RedisManager) Subscribe(ctx context.Context, sub *Subscription) (string
 func (m *RedisManager) addIndexes(ctx context.Context, pipe redis.Pipeliner, sub *Subscription) {
 	f := sub.Filter
 
-	// Track if we have any specific filters
 	hasFilters := false
 
-	// Chain indexes
 	for _, chain := range f.Chains {
 		pipe.SAdd(ctx, m.key(keyChainIndex, strconv.Itoa(int(chain))), sub.ID)
 		hasFilters = true
 	}
 
-	// Account indexes
 	for _, account := range f.Accounts {
 		pipe.SAdd(ctx, m.key(keyAccountIndex, account), sub.ID)
 		hasFilters = true
 	}
 
-	// Event type indexes
 	for _, eventType := range f.EventTypes {
 		pipe.SAdd(ctx, m.key(keyEventTypeIndex, eventType), sub.ID)
 		hasFilters = true
 	}
 
-	// Program ID indexes
 	for _, programId := range f.ProgramIds {
 		pipe.SAdd(ctx, m.key(keyProgramIndex, programId), sub.ID)
 		hasFilters = true
 	}
 
-	// If no specific filters, add to wildcard set
 	if !hasFilters {
 		pipe.SAdd(ctx, m.key(keyWildcardSubs), sub.ID)
 	}
 }
 
-// Unsubscribe removes a subscription by ID.
 func (m *RedisManager) Unsubscribe(ctx context.Context, subID string) error {
-	// Get subscription first to know which indexes to remove
 	sub, err := m.Get(ctx, subID)
 	if err != nil {
 		return err
 	}
 	if sub == nil {
-		return nil // Already removed
+		return nil
 	}
 
 	return m.removeSubscription(ctx, sub)
@@ -182,16 +158,12 @@ func (m *RedisManager) Unsubscribe(ctx context.Context, subID string) error {
 func (m *RedisManager) removeSubscription(ctx context.Context, sub *Subscription) error {
 	pipe := m.client.TxPipeline()
 
-	// Remove subscription data
 	pipe.Del(ctx, m.key(keySubscription, sub.ID))
 
-	// Remove from client's set
 	pipe.SRem(ctx, m.key(keyClientSubs, sub.ClientID), sub.ID)
 
-	// Remove from indexes
 	m.removeIndexes(ctx, pipe, sub)
 
-	// Remove from expirations
 	pipe.ZRem(ctx, m.key(keyExpirations), sub.ID)
 
 	_, err := pipe.Exec(ctx)
@@ -217,11 +189,9 @@ func (m *RedisManager) removeIndexes(ctx context.Context, pipe redis.Pipeliner, 
 		pipe.SRem(ctx, m.key(keyProgramIndex, programId), sub.ID)
 	}
 
-	// Also remove from wildcard set (in case it was there)
 	pipe.SRem(ctx, m.key(keyWildcardSubs), sub.ID)
 }
 
-// UnsubscribeAll removes all subscriptions for a client.
 func (m *RedisManager) UnsubscribeAll(ctx context.Context, clientID string) error {
 	subs, err := m.ListByClient(ctx, clientID)
 	if err != nil {
@@ -237,7 +207,6 @@ func (m *RedisManager) UnsubscribeAll(ctx context.Context, clientID string) erro
 	return nil
 }
 
-// Get retrieves a subscription by ID.
 func (m *RedisManager) Get(ctx context.Context, subID string) (*Subscription, error) {
 	data, err := m.client.Get(ctx, m.key(keySubscription, subID)).Bytes()
 	if err == redis.Nil {
@@ -255,7 +224,6 @@ func (m *RedisManager) Get(ctx context.Context, subID string) (*Subscription, er
 	return &sub, nil
 }
 
-// ListByClient returns all subscriptions for a client.
 func (m *RedisManager) ListByClient(ctx context.Context, clientID string) ([]*Subscription, error) {
 	subIDs, err := m.client.SMembers(ctx, m.key(keyClientSubs, clientID)).Result()
 	if err != nil {
@@ -266,7 +234,6 @@ func (m *RedisManager) ListByClient(ctx context.Context, clientID string) ([]*Su
 		return nil, nil
 	}
 
-	// Fetch all subscriptions in a pipeline
 	pipe := m.client.Pipeline()
 	cmds := make([]*redis.StringCmd, len(subIDs))
 	for i, id := range subIDs {
@@ -281,7 +248,7 @@ func (m *RedisManager) ListByClient(ctx context.Context, clientID string) ([]*Su
 	for _, cmd := range cmds {
 		data, err := cmd.Bytes()
 		if err == redis.Nil {
-			continue // Subscription was deleted
+			continue
 		}
 		if err != nil {
 			return nil, err
@@ -297,12 +264,9 @@ func (m *RedisManager) ListByClient(ctx context.Context, clientID string) ([]*Su
 	return subs, nil
 }
 
-// Match finds all subscriptions that match the given event.
 func (m *RedisManager) Match(ctx context.Context, event *protov1.CanonicalEvent) ([]MatchResult, error) {
-	// Get candidate subscription IDs from indexes
 	candidates := make(map[string]bool)
 
-	// Start with wildcard subscriptions (match all)
 	wildcardIDs, err := m.client.SMembers(ctx, m.key(keyWildcardSubs)).Result()
 	if err != nil && err != redis.Nil {
 		return nil, fmt.Errorf("get wildcard subs: %w", err)
@@ -311,14 +275,12 @@ func (m *RedisManager) Match(ctx context.Context, event *protov1.CanonicalEvent)
 		candidates[id] = true
 	}
 
-	// Get chain-specific subscriptions
 	chainKey := m.key(keyChainIndex, strconv.Itoa(int(event.Chain)))
 	chainIDs, _ := m.client.SMembers(ctx, chainKey).Result()
 	for _, id := range chainIDs {
 		candidates[id] = true
 	}
 
-	// Get event-type-specific subscriptions
 	if event.EventType != "" {
 		typeKey := m.key(keyEventTypeIndex, event.EventType)
 		typeIDs, _ := m.client.SMembers(ctx, typeKey).Result()
@@ -327,7 +289,6 @@ func (m *RedisManager) Match(ctx context.Context, event *protov1.CanonicalEvent)
 		}
 	}
 
-	// Get account-specific subscriptions
 	for _, account := range event.Accounts {
 		acctKey := m.key(keyAccountIndex, account)
 		acctIDs, _ := m.client.SMembers(ctx, acctKey).Result()
@@ -336,7 +297,6 @@ func (m *RedisManager) Match(ctx context.Context, event *protov1.CanonicalEvent)
 		}
 	}
 
-	// Get program-specific subscriptions
 	if event.ProgramId != "" {
 		progKey := m.key(keyProgramIndex, event.ProgramId)
 		progIDs, _ := m.client.SMembers(ctx, progKey).Result()
@@ -349,7 +309,6 @@ func (m *RedisManager) Match(ctx context.Context, event *protov1.CanonicalEvent)
 		return nil, nil
 	}
 
-	// Fetch candidate subscriptions and do full filter matching
 	candidateList := make([]string, 0, len(candidates))
 	for id := range candidates {
 		candidateList = append(candidateList, id)
@@ -382,12 +341,10 @@ func (m *RedisManager) Match(ctx context.Context, event *protov1.CanonicalEvent)
 			continue
 		}
 
-		// Check expiration
 		if !sub.ExpiresAt.IsZero() && sub.ExpiresAt.Before(now) {
 			continue
 		}
 
-		// Full filter match
 		if sub.Filter.Matches(event) {
 			results = append(results, MatchResult{
 				SubscriptionID: sub.ID,
@@ -399,8 +356,6 @@ func (m *RedisManager) Match(ctx context.Context, event *protov1.CanonicalEvent)
 	return results, nil
 }
 
-// FindMatchingSubscribers returns unique client IDs that have subscriptions matching the event.
-// This is a convenience method for routing events to WebSocket clients.
 func (m *RedisManager) FindMatchingSubscribers(ctx context.Context, event *protov1.CanonicalEvent) ([]string, error) {
 	matches, err := m.Match(ctx, event)
 	if err != nil {
@@ -411,7 +366,6 @@ func (m *RedisManager) FindMatchingSubscribers(ctx context.Context, event *proto
 		return nil, nil
 	}
 
-	// Extract unique client IDs
 	seen := make(map[string]bool, len(matches))
 	clientIDs := make([]string, 0, len(matches))
 	for _, match := range matches {
@@ -424,13 +378,11 @@ func (m *RedisManager) FindMatchingSubscribers(ctx context.Context, event *proto
 	return clientIDs, nil
 }
 
-// MatchBatch finds matching subscriptions for multiple events using parallel matching.
 func (m *RedisManager) MatchBatch(ctx context.Context, events []*protov1.CanonicalEvent) (map[string][]MatchResult, error) {
 	if len(events) == 0 {
 		return make(map[string][]MatchResult), nil
 	}
 
-	// For single events, skip parallelization overhead
 	if len(events) == 1 {
 		matches, err := m.Match(ctx, events[0])
 		if err != nil {
@@ -439,7 +391,6 @@ func (m *RedisManager) MatchBatch(ctx context.Context, events []*protov1.Canonic
 		return map[string][]MatchResult{events[0].EventId: matches}, nil
 	}
 
-	// Parallel matching with bounded concurrency
 	const maxWorkers = 8
 	numWorkers := len(events)
 	if numWorkers > maxWorkers {
@@ -458,7 +409,6 @@ func (m *RedisManager) MatchBatch(ctx context.Context, events []*protov1.Canonic
 	jobs := make(chan matchJob, len(events))
 	resultsCh := make(chan matchResult, len(events))
 
-	// Start workers
 	var wg sync.WaitGroup
 	for i := 0; i < numWorkers; i++ {
 		wg.Add(1)
@@ -475,19 +425,16 @@ func (m *RedisManager) MatchBatch(ctx context.Context, events []*protov1.Canonic
 		}()
 	}
 
-	// Send jobs
 	for _, event := range events {
 		jobs <- matchJob{event: event}
 	}
 	close(jobs)
 
-	// Wait for workers and close results channel
 	go func() {
 		wg.Wait()
 		close(resultsCh)
 	}()
 
-	// Collect results
 	results := make(map[string][]MatchResult, len(events))
 	var firstErr error
 	for res := range resultsCh {
@@ -504,7 +451,6 @@ func (m *RedisManager) MatchBatch(ctx context.Context, events []*protov1.Canonic
 	return results, nil
 }
 
-// Refresh updates the expiration time for a subscription.
 func (m *RedisManager) Refresh(ctx context.Context, subID string, expiresAt time.Time) error {
 	sub, err := m.Get(ctx, subID)
 	if err != nil {
@@ -516,7 +462,6 @@ func (m *RedisManager) Refresh(ctx context.Context, subID string, expiresAt time
 
 	sub.ExpiresAt = expiresAt
 
-	// Update subscription and expiration index
 	data, err := json.Marshal(sub)
 	if err != nil {
 		return fmt.Errorf("marshal subscription: %w", err)
@@ -538,11 +483,9 @@ func (m *RedisManager) Refresh(ctx context.Context, subID string, expiresAt time
 	return err
 }
 
-// Cleanup removes expired subscriptions.
 func (m *RedisManager) Cleanup(ctx context.Context) (int, error) {
 	now := time.Now().Unix()
 
-	// Get expired subscription IDs
 	expiredIDs, err := m.client.ZRangeByScore(ctx, m.key(keyExpirations), &redis.ZRangeBy{
 		Min: "-inf",
 		Max: strconv.FormatInt(now, 10),
@@ -565,9 +508,7 @@ func (m *RedisManager) Cleanup(ctx context.Context) (int, error) {
 	return count, nil
 }
 
-// Count returns the total number of active subscriptions.
 func (m *RedisManager) Count(ctx context.Context) (int64, error) {
-	// Count all subscription keys
 	var cursor uint64
 	var count int64
 
@@ -586,12 +527,10 @@ func (m *RedisManager) Count(ctx context.Context) (int64, error) {
 	return count, nil
 }
 
-// Close releases any resources held by the manager.
 func (m *RedisManager) Close() error {
 	return m.client.Close()
 }
 
-// generateSubscriptionID creates a unique subscription ID.
 func generateSubscriptionID() string {
 	return fmt.Sprintf("sub_%d_%d", time.Now().UnixNano(), time.Now().Nanosecond()%1000)
 }

@@ -58,7 +58,6 @@ func TestReorgDetector_NormalChainExtension(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
 	detector := NewReorgDetector(DefaultReorgDetectorConfig(), logger)
 
-	// First block
 	block1 := &BlockInfo{
 		Number:     100,
 		Hash:       "0xblock100_hash_0000000000000000000000000000000000000000000000",
@@ -67,11 +66,10 @@ func TestReorgDetector_NormalChainExtension(t *testing.T) {
 	}
 	detector.ProcessBlock(ctx, block1)
 
-	// Second block extending the chain
 	block2 := &BlockInfo{
 		Number:     101,
 		Hash:       "0xblock101_hash_0000000000000000000000000000000000000000000000",
-		ParentHash: "0xblock100_hash_0000000000000000000000000000000000000000000000", // Points to block1
+		ParentHash: "0xblock100_hash_0000000000000000000000000000000000000000000000",
 		Timestamp:  1012,
 	}
 
@@ -94,7 +92,6 @@ func TestReorgDetector_DetectsReorg(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
 	detector := NewReorgDetector(DefaultReorgDetectorConfig(), logger)
 
-	// Build a chain: 100 -> 101 -> 102
 	blocks := []*BlockInfo{
 		{Number: 100, Hash: "0xblock100_aaaa000000000000000000000000000000000000000000000", ParentHash: "0xblock99_0000000000000000000000000000000000000000000000000", Timestamp: 1000},
 		{Number: 101, Hash: "0xblock101_aaaa000000000000000000000000000000000000000000000", ParentHash: "0xblock100_aaaa000000000000000000000000000000000000000000000", Timestamp: 1012},
@@ -108,11 +105,10 @@ func TestReorgDetector_DetectsReorg(t *testing.T) {
 		}
 	}
 
-	// Now introduce a reorg: new block 102 that forks from block 100
 	forkBlock := &BlockInfo{
 		Number:     102,
-		Hash:       "0xblock102_bbbb000000000000000000000000000000000000000000000", // Different hash
-		ParentHash: "0xblock100_aaaa000000000000000000000000000000000000000000000", // Forks from block 100
+		Hash:       "0xblock102_bbbb000000000000000000000000000000000000000000000",
+		ParentHash: "0xblock100_aaaa000000000000000000000000000000000000000000000",
 		Timestamp:  1024,
 	}
 
@@ -133,7 +129,6 @@ func TestReorgDetector_DetectsReorg(t *testing.T) {
 		t.Errorf("expected depth 2, got %d", reorg.Depth)
 	}
 
-	// Should have orphaned blocks 101 and 102
 	if len(reorg.OrphanedBlocks) != 2 {
 		t.Errorf("expected 2 orphaned blocks, got %d", len(reorg.OrphanedBlocks))
 	}
@@ -151,7 +146,6 @@ func TestReorgDetector_DuplicateBlock(t *testing.T) {
 		Timestamp:  1000,
 	}
 
-	// Process same block twice
 	detector.ProcessBlock(ctx, block)
 	reorg, err := detector.ProcessBlock(ctx, block)
 
@@ -168,7 +162,6 @@ func TestReorgDetector_MultiChain(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
 	detector := NewReorgDetector(DefaultReorgDetectorConfig(), logger)
 
-	// Process blocks for ethereum
 	ethBlock := &BlockInfo{
 		Number:     100,
 		Hash:       "0xeth_block100_0000000000000000000000000000000000000000000000",
@@ -177,7 +170,6 @@ func TestReorgDetector_MultiChain(t *testing.T) {
 	}
 	detector.ProcessBlockForChain(ctx, "ethereum", ethBlock)
 
-	// Process blocks for solana
 	solBlock := &BlockInfo{
 		Number:     50000,
 		Hash:       "sol_block50000_000000000000000000000000000000000000000000000",
@@ -186,7 +178,6 @@ func TestReorgDetector_MultiChain(t *testing.T) {
 	}
 	detector.ProcessBlockForChain(ctx, "solana", solBlock)
 
-	// Verify each chain has separate head
 	ethHead := detector.GetChainHead("ethereum")
 	solHead := detector.GetChainHead("solana")
 
@@ -209,7 +200,6 @@ func TestReorgDetector_ReorgCallback(t *testing.T) {
 		return nil
 	})
 
-	// Build chain: 99 -> 100 -> 101
 	blocks := []*BlockInfo{
 		{Number: 99, Hash: "0xblock99_0000000000000000000000000000000000000000000000000", ParentHash: "0xblock98_0000000000000000000000000000000000000000000000000", Timestamp: 988},
 		{Number: 100, Hash: "0xblock100_aaaa000000000000000000000000000000000000000000000", ParentHash: "0xblock99_0000000000000000000000000000000000000000000000000", Timestamp: 1000},
@@ -220,11 +210,10 @@ func TestReorgDetector_ReorgCallback(t *testing.T) {
 		detector.ProcessBlock(ctx, b)
 	}
 
-	// Trigger reorg: new block 101 that forks from block 99 (instead of 100)
 	forkBlock := &BlockInfo{
 		Number:     101,
 		Hash:       "0xblock101_bbbb000000000000000000000000000000000000000000000",
-		ParentHash: "0xblock99_0000000000000000000000000000000000000000000000000", // Fork from block 99
+		ParentHash: "0xblock99_0000000000000000000000000000000000000000000000000",
 		Timestamp:  1012,
 	}
 	detector.ProcessBlock(ctx, forkBlock)
@@ -326,7 +315,6 @@ func TestReorgDetector_ProcessAdapterEvent_SkipsNonBlocks(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
 	detector := NewReorgDetector(DefaultReorgDetectorConfig(), logger)
 
-	// Log event without block hash should be skipped
 	event := adapter.Event{
 		Chain:     "ethereum",
 		EventType: "log",
@@ -362,7 +350,7 @@ func TestReorgDetector_CreateRetractionEvents(t *testing.T) {
 		{EventId: "evt_1", BlockNumber: 101, Chain: protov1.Chain_CHAIN_ETHEREUM},
 		{EventId: "evt_2", BlockNumber: 101, Chain: protov1.Chain_CHAIN_ETHEREUM},
 		{EventId: "evt_3", BlockNumber: 102, Chain: protov1.Chain_CHAIN_ETHEREUM},
-		{EventId: "evt_4", BlockNumber: 100, Chain: protov1.Chain_CHAIN_ETHEREUM}, // Not orphaned
+		{EventId: "evt_4", BlockNumber: 100, Chain: protov1.Chain_CHAIN_ETHEREUM},
 	}
 
 	retractions := detector.CreateRetractionEvents(reorg, originalEvents)
@@ -383,7 +371,6 @@ func TestReorgDetector_Stats(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
 	detector := NewReorgDetector(DefaultReorgDetectorConfig(), logger)
 
-	// Add some blocks
 	for i := uint64(100); i < 105; i++ {
 		block := &BlockInfo{
 			Number:     i,
@@ -415,12 +402,11 @@ func TestReorgDetector_PrunesOldBlocks(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
 
 	cfg := ReorgDetectorConfig{
-		MaxTrackedBlocks: 10, // Small limit for testing
+		MaxTrackedBlocks: 10,
 		MinConfirmations: 3,
 	}
 	detector := NewReorgDetector(cfg, logger)
 
-	// Add 20 blocks
 	for i := uint64(100); i < 120; i++ {
 		block := &BlockInfo{
 			Number:     i,
@@ -431,13 +417,11 @@ func TestReorgDetector_PrunesOldBlocks(t *testing.T) {
 		detector.ProcessBlock(ctx, block)
 	}
 
-	// Old blocks should be pruned
 	oldBlock := detector.GetBlockByHeight("default", 100)
 	if oldBlock != nil {
 		t.Error("old block should have been pruned")
 	}
 
-	// Recent blocks should still exist
 	recentBlock := detector.GetBlockByHeight("default", 115)
 	if recentBlock == nil {
 		t.Error("recent block should still exist")

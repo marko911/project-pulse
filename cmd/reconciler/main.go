@@ -1,6 +1,3 @@
-// Package main implements the Reconciliation Service.
-// This service compares local manifests with golden source data
-// to verify data integrity and implements fail-closed behavior.
 package main
 
 import (
@@ -19,32 +16,26 @@ import (
 )
 
 func main() {
-	// Configuration flags
 	var (
-		// Database configuration
 		dbHost     = flag.String("db-host", envOrDefault("DB_HOST", "localhost"), "Database host")
 		dbPort     = flag.Int("db-port", envOrDefaultInt("DB_PORT", 5432), "Database port")
 		dbUser     = flag.String("db-user", envOrDefault("DB_USER", "pulse"), "Database user")
 		dbPassword = flag.String("db-password", envOrDefault("DB_PASSWORD", "pulse_dev"), "Database password")
 		dbName     = flag.String("db-name", envOrDefault("DB_NAME", "pulse"), "Database name")
 
-		// Golden source configuration
 		goldenEVMURL    = flag.String("golden-evm-url", envOrDefault("GOLDEN_EVM_URL", ""), "Golden source EVM RPC URL")
 		goldenSolanaURL = flag.String("golden-solana-url", envOrDefault("GOLDEN_SOLANA_URL", ""), "Golden source Solana RPC URL")
 
-		// Reconciler configuration
 		reconcileInterval = flag.Duration("reconcile-interval", 30*time.Second, "Reconciliation interval")
 		batchSize         = flag.Int("batch-size", 100, "Max blocks per reconcile cycle")
 		lookbackBlocks    = flag.Uint64("lookback-blocks", 1000, "How far back to look for unreconciled blocks")
 		failClosed        = flag.Bool("fail-closed", true, "Halt on reconciliation mismatch")
 
-		// Service configuration
 		metricsAddr = flag.String("metrics-addr", envOrDefault("METRICS_ADDR", ":9093"), "Address for metrics endpoint")
 		logLevel    = flag.String("log-level", envOrDefault("LOG_LEVEL", "info"), "Log level: debug, info, warn, error")
 	)
 	flag.Parse()
 
-	// Setup structured logging
 	var level slog.Level
 	switch *logLevel {
 	case "debug":
@@ -70,7 +61,6 @@ func main() {
 		"metrics_addr", *metricsAddr,
 	)
 
-	// Create database connection
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -90,7 +80,6 @@ func main() {
 	}
 	defer db.Close()
 
-	// Run database migrations
 	if err := db.Migrate(ctx); err != nil {
 		slog.Error("failed to run database migrations", "error", err)
 		os.Exit(1)
@@ -98,12 +87,10 @@ func main() {
 
 	slog.Info("connected to database and applied migrations", "host", *dbHost, "database", *dbName)
 
-	// Create golden source verifier
 	verifierCfg := goldensource.DefaultVerifierConfig()
 	verifierCfg.FailClosed = *failClosed
 	verifier := goldensource.NewVerifier(verifierCfg, logger)
 
-	// Register golden source clients
 	if *goldenEVMURL != "" {
 		evmClient := goldensource.NewEVMClient(&goldensource.Config{
 			URL:   *goldenEVMURL,
@@ -117,14 +104,12 @@ func main() {
 		}
 	}
 
-	// Note: Solana client would be registered similarly
 	if *goldenSolanaURL != "" {
 		slog.Info("solana golden source URL configured (client not yet implemented)",
 			"url", *goldenSolanaURL,
 		)
 	}
 
-	// Create and run the reconciler
 	reconcilerCfg := ReconcilerConfig{
 		ReconcileInterval: *reconcileInterval,
 		BatchSize:         *batchSize,
@@ -135,7 +120,6 @@ func main() {
 
 	reconciler := NewReconciler(reconcilerCfg, db, verifier, logger)
 
-	// Setup graceful shutdown
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 
@@ -145,13 +129,11 @@ func main() {
 		cancel()
 	}()
 
-	// Run the reconciler
 	if err := reconciler.Run(ctx); err != nil && ctx.Err() == nil {
 		slog.Error("reconciler error", "error", err)
 		os.Exit(1)
 	}
 
-	// Graceful shutdown
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer shutdownCancel()
 
@@ -188,7 +170,6 @@ func envOrDefaultInt(key string, defaultVal int) int {
 	return defaultVal
 }
 
-// splitAndTrim splits a comma-separated string and trims whitespace.
 func splitAndTrim(s string) []string {
 	parts := strings.Split(s, ",")
 	result := make([]string, 0, len(parts))

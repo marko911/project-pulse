@@ -9,13 +9,11 @@ import (
 func TestChainState_FirstBlock(t *testing.T) {
 	state := NewChainState()
 
-	// First block should not produce a gap
 	gap := state.CheckAndUpdate(protov1.Chain_CHAIN_ETHEREUM, 3, 100, "test-topic")
 	if gap != nil {
 		t.Errorf("expected no gap for first block, got: %+v", gap)
 	}
 
-	// Verify state was updated
 	lastBlock, exists := state.GetLastBlock(protov1.Chain_CHAIN_ETHEREUM, 3)
 	if !exists {
 		t.Error("expected chain to exist after first block")
@@ -28,7 +26,6 @@ func TestChainState_FirstBlock(t *testing.T) {
 func TestChainState_ConsecutiveBlocks(t *testing.T) {
 	state := NewChainState()
 
-	// Process consecutive blocks
 	blocks := []uint64{100, 101, 102, 103, 104}
 	for _, block := range blocks {
 		gap := state.CheckAndUpdate(protov1.Chain_CHAIN_ETHEREUM, 3, block, "test-topic")
@@ -46,10 +43,8 @@ func TestChainState_ConsecutiveBlocks(t *testing.T) {
 func TestChainState_GapDetection(t *testing.T) {
 	state := NewChainState()
 
-	// First block
 	state.CheckAndUpdate(protov1.Chain_CHAIN_ETHEREUM, 3, 100, "test-topic")
 
-	// Skip block 101, receive 102 - should detect gap
 	gap := state.CheckAndUpdate(protov1.Chain_CHAIN_ETHEREUM, 3, 102, "test-topic")
 	if gap == nil {
 		t.Fatal("expected gap to be detected")
@@ -72,10 +67,8 @@ func TestChainState_GapDetection(t *testing.T) {
 func TestChainState_LargeGap(t *testing.T) {
 	state := NewChainState()
 
-	// First block at 1000
 	state.CheckAndUpdate(protov1.Chain_CHAIN_SOLANA, 3, 1000, "test-topic")
 
-	// Skip to block 1010 - gap of 9 blocks
 	gap := state.CheckAndUpdate(protov1.Chain_CHAIN_SOLANA, 3, 1010, "test-topic")
 	if gap == nil {
 		t.Fatal("expected gap to be detected")
@@ -89,18 +82,15 @@ func TestChainState_LargeGap(t *testing.T) {
 func TestChainState_DuplicateBlock(t *testing.T) {
 	state := NewChainState()
 
-	// Process some blocks
 	state.CheckAndUpdate(protov1.Chain_CHAIN_ETHEREUM, 3, 100, "test-topic")
 	state.CheckAndUpdate(protov1.Chain_CHAIN_ETHEREUM, 3, 101, "test-topic")
 	state.CheckAndUpdate(protov1.Chain_CHAIN_ETHEREUM, 3, 102, "test-topic")
 
-	// Receive duplicate block 101 - should not produce gap
 	gap := state.CheckAndUpdate(protov1.Chain_CHAIN_ETHEREUM, 3, 101, "test-topic")
 	if gap != nil {
 		t.Errorf("expected no gap for duplicate block, got: %+v", gap)
 	}
 
-	// State should still show 102 as last block
 	lastBlock, _ := state.GetLastBlock(protov1.Chain_CHAIN_ETHEREUM, 3)
 	if lastBlock != 102 {
 		t.Errorf("expected last block 102 after duplicate, got %d", lastBlock)
@@ -110,12 +100,10 @@ func TestChainState_DuplicateBlock(t *testing.T) {
 func TestChainState_MultipleChains(t *testing.T) {
 	state := NewChainState()
 
-	// Different chains can have different block sequences
 	state.CheckAndUpdate(protov1.Chain_CHAIN_ETHEREUM, 3, 100, "eth-topic")
 	state.CheckAndUpdate(protov1.Chain_CHAIN_SOLANA, 3, 50000, "sol-topic")
 	state.CheckAndUpdate(protov1.Chain_CHAIN_POLYGON, 3, 200, "poly-topic")
 
-	// Advance each independently
 	gap := state.CheckAndUpdate(protov1.Chain_CHAIN_ETHEREUM, 3, 101, "eth-topic")
 	if gap != nil {
 		t.Error("expected no gap for ethereum")
@@ -126,7 +114,6 @@ func TestChainState_MultipleChains(t *testing.T) {
 		t.Error("expected no gap for solana")
 	}
 
-	// Create gap on polygon
 	gap = state.CheckAndUpdate(protov1.Chain_CHAIN_POLYGON, 3, 205, "poly-topic")
 	if gap == nil {
 		t.Fatal("expected gap for polygon")
@@ -142,12 +129,10 @@ func TestChainState_MultipleChains(t *testing.T) {
 func TestChainState_DifferentCommitmentLevels(t *testing.T) {
 	state := NewChainState()
 
-	// Same chain, different commitment levels are tracked separately
-	state.CheckAndUpdate(protov1.Chain_CHAIN_ETHEREUM, 1, 100, "topic") // processed
-	state.CheckAndUpdate(protov1.Chain_CHAIN_ETHEREUM, 2, 95, "topic")  // confirmed
-	state.CheckAndUpdate(protov1.Chain_CHAIN_ETHEREUM, 3, 90, "topic")  // finalized
+	state.CheckAndUpdate(protov1.Chain_CHAIN_ETHEREUM, 1, 100, "topic")
+	state.CheckAndUpdate(protov1.Chain_CHAIN_ETHEREUM, 2, 95, "topic")
+	state.CheckAndUpdate(protov1.Chain_CHAIN_ETHEREUM, 3, 90, "topic")
 
-	// Check each tracked separately
 	lastProcessed, _ := state.GetLastBlock(protov1.Chain_CHAIN_ETHEREUM, 1)
 	lastConfirmed, _ := state.GetLastBlock(protov1.Chain_CHAIN_ETHEREUM, 2)
 	lastFinalized, _ := state.GetLastBlock(protov1.Chain_CHAIN_ETHEREUM, 3)
@@ -166,10 +151,9 @@ func TestChainState_DifferentCommitmentLevels(t *testing.T) {
 func TestChainState_GetStats(t *testing.T) {
 	state := NewChainState()
 
-	// Process some blocks with a gap
 	state.CheckAndUpdate(protov1.Chain_CHAIN_ETHEREUM, 3, 100, "topic")
 	state.CheckAndUpdate(protov1.Chain_CHAIN_ETHEREUM, 3, 101, "topic")
-	state.CheckAndUpdate(protov1.Chain_CHAIN_ETHEREUM, 3, 105, "topic") // gap!
+	state.CheckAndUpdate(protov1.Chain_CHAIN_ETHEREUM, 3, 105, "topic")
 
 	stats := state.GetStats()
 
@@ -196,7 +180,6 @@ func TestChainState_GetState(t *testing.T) {
 		t.Errorf("expected 2 snapshots, got %d", len(snapshots))
 	}
 
-	// Verify each snapshot has valid data
 	for _, snap := range snapshots {
 		if snap.Tracker == nil {
 			t.Error("expected tracker in snapshot")
@@ -213,10 +196,8 @@ func TestChainState_Reset(t *testing.T) {
 	state.CheckAndUpdate(protov1.Chain_CHAIN_ETHEREUM, 3, 100, "topic")
 	state.CheckAndUpdate(protov1.Chain_CHAIN_SOLANA, 3, 200, "topic")
 
-	// Reset
 	state.Reset()
 
-	// Should be empty
 	snapshots := state.GetState()
 	if len(snapshots) != 0 {
 		t.Errorf("expected 0 snapshots after reset, got %d", len(snapshots))
@@ -231,7 +212,6 @@ func TestChainState_Reset(t *testing.T) {
 func TestChainState_ConcurrentAccess(t *testing.T) {
 	state := NewChainState()
 
-	// Concurrent writes shouldn't panic
 	done := make(chan bool, 10)
 
 	for i := 0; i < 10; i++ {
@@ -243,12 +223,10 @@ func TestChainState_ConcurrentAccess(t *testing.T) {
 		}(protov1.Chain(i%8+1), uint64(i*1000))
 	}
 
-	// Wait for all goroutines
 	for i := 0; i < 10; i++ {
 		<-done
 	}
 
-	// Verify state is consistent
 	stats := state.GetStats()
 	if stats["chain_count"].(int) == 0 {
 		t.Error("expected some chains to be tracked")

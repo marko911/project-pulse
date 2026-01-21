@@ -22,7 +22,7 @@ func TestDetector_NewDetector(t *testing.T) {
 		ConsumerGroup: "test-group",
 		PollInterval:  100 * time.Millisecond,
 		StateDir:      "/tmp/gap-detector-test",
-		MetricsAddr:   ":0", // Random port
+		MetricsAddr:   ":0",
 	}
 
 	detector, err := NewDetector(cfg, logger)
@@ -54,7 +54,6 @@ func TestDetector_Halt(t *testing.T) {
 		t.Error("expected detector to not be halted initially")
 	}
 
-	// Halt the detector
 	detector.halt(nil)
 
 	if !detector.IsHalted() {
@@ -68,7 +67,7 @@ func TestDetector_HandleGap_HaltsWithZeroThreshold(t *testing.T) {
 	cfg := DetectorConfig{
 		Brokers:      []string{"localhost:9092"},
 		Topics:       []string{"test-topic"},
-		MaxGapBlocks: 0, // Any gap triggers halt
+		MaxGapBlocks: 0,
 	}
 
 	detector, _ := NewDetector(cfg, logger)
@@ -96,7 +95,7 @@ func TestDetector_HandleGap_DoesNotHaltWithinThreshold(t *testing.T) {
 	cfg := DetectorConfig{
 		Brokers:      []string{"localhost:9092"},
 		Topics:       []string{"test-topic"},
-		MaxGapBlocks: 5, // Allow gaps up to 5 blocks
+		MaxGapBlocks: 5,
 	}
 
 	detector, _ := NewDetector(cfg, logger)
@@ -106,7 +105,7 @@ func TestDetector_HandleGap_DoesNotHaltWithinThreshold(t *testing.T) {
 		CommitmentLevel: 3,
 		ExpectedBlock:   100,
 		ReceivedBlock:   102,
-		GapSize:         2, // Within threshold
+		GapSize:         2,
 		DetectedAt:      time.Now(),
 		Topic:           "test-topic",
 	}
@@ -134,7 +133,7 @@ func TestDetector_HandleGap_HaltsAboveThreshold(t *testing.T) {
 		CommitmentLevel: 3,
 		ExpectedBlock:   100,
 		ReceivedBlock:   110,
-		GapSize:         10, // Above threshold
+		GapSize:         10,
 		DetectedAt:      time.Now(),
 		Topic:           "test-topic",
 	}
@@ -156,7 +155,6 @@ func TestDetector_HealthEndpoint(t *testing.T) {
 
 	detector, _ := NewDetector(cfg, logger)
 
-	// Create a test server with the health handler
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		detector.mu.Lock()
 		halted := detector.halted
@@ -171,7 +169,6 @@ func TestDetector_HealthEndpoint(t *testing.T) {
 		w.Write([]byte(`{"status":"healthy"}`))
 	})
 
-	// Test healthy state
 	req := httptest.NewRequest("GET", "/health", nil)
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
@@ -180,7 +177,6 @@ func TestDetector_HealthEndpoint(t *testing.T) {
 		t.Errorf("expected status 200, got %d", rec.Code)
 	}
 
-	// Halt and test again
 	detector.halt(nil)
 
 	rec = httptest.NewRecorder()
@@ -201,13 +197,11 @@ func TestDetector_MetricsEndpoint(t *testing.T) {
 
 	detector, _ := NewDetector(cfg, logger)
 
-	// Simulate some processing
 	detector.mu.Lock()
 	detector.blocksScanned = 100
 	detector.gapCount = 2
 	detector.mu.Unlock()
 
-	// Create metrics handler
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		detector.mu.Lock()
 		metrics := map[string]interface{}{

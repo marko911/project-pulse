@@ -1,5 +1,3 @@
-// Package replay provides a FileSource implementation for replaying
-// recorded blockchain fixtures during testing and development.
 package replay
 
 import (
@@ -15,7 +13,6 @@ import (
 	"github.com/marko911/project-pulse/internal/adapter"
 )
 
-// Fixture represents the base fixture structure from fixture-recorder.
 type Fixture struct {
 	Chain       string          `json:"chain"`
 	Type        string          `json:"type"`
@@ -25,7 +22,6 @@ type Fixture struct {
 	Data        json.RawMessage `json:"data"`
 }
 
-// EVMBlockFixture represents a recorded EVM block.
 type EVMBlockFixture struct {
 	Number       uint64   `json:"number"`
 	Hash         string   `json:"hash"`
@@ -37,7 +33,6 @@ type EVMBlockFixture struct {
 	Transactions []string `json:"transactions"`
 }
 
-// EVMLogFixture represents a recorded EVM log/event.
 type EVMLogFixture struct {
 	Address     string   `json:"address"`
 	Topics      []string `json:"topics"`
@@ -50,7 +45,6 @@ type EVMLogFixture struct {
 	Removed     bool     `json:"removed"`
 }
 
-// SolanaBlockFixture represents a recorded Solana block/slot.
 type SolanaBlockFixture struct {
 	Slot              uint64   `json:"slot"`
 	Blockhash         string   `json:"blockhash"`
@@ -61,7 +55,6 @@ type SolanaBlockFixture struct {
 	Transactions      []string `json:"transactions"`
 }
 
-// SolanaTransactionFixture represents a recorded Solana transaction.
 type SolanaTransactionFixture struct {
 	Signature   string   `json:"signature"`
 	Slot        uint64   `json:"slot"`
@@ -73,28 +66,21 @@ type SolanaTransactionFixture struct {
 	LogMessages []string `json:"log_messages,omitempty"`
 }
 
-// FileSourceConfig holds configuration for FileSource.
 type FileSourceConfig struct {
-	// Chain identifier filter (e.g., "ethereum", "solana", "" for all)
 	Chain string
 
-	// Path to fixtures directory
 	FixturesDir string
 
-	// Whether to loop continuously
 	Loop bool
 
-	// Playback speed (0 = instant, 1.0 = realtime based on timestamps)
 	PlaybackSpeed float64
 }
 
-// FileSource implements adapter.Source by streaming events from fixture files.
 type FileSource struct {
 	cfg    FileSourceConfig
 	logger *slog.Logger
 }
 
-// NewFileSource creates a new FileSource for replaying fixtures.
 func NewFileSource(cfg FileSourceConfig, logger *slog.Logger) *FileSource {
 	if logger == nil {
 		logger = slog.Default()
@@ -105,14 +91,10 @@ func NewFileSource(cfg FileSourceConfig, logger *slog.Logger) *FileSource {
 	}
 }
 
-// Name returns the source identifier.
 func (s *FileSource) Name() string {
 	return "file"
 }
 
-// Stream reads fixture files and sends events to the provided channel.
-// Files are processed in sorted order (alphabetically by filename).
-// The channel is NOT closed by Stream - caller is responsible for cleanup.
 func (s *FileSource) Stream(ctx context.Context, events chan<- adapter.Event) error {
 	s.logger.Info("starting file source stream",
 		"fixtures_dir", s.cfg.FixturesDir,
@@ -122,7 +104,6 @@ func (s *FileSource) Stream(ctx context.Context, events chan<- adapter.Event) er
 	)
 
 	for {
-		// Find all fixture files
 		files, err := s.findFixtureFiles()
 		if err != nil {
 			return fmt.Errorf("find fixture files: %w", err)
@@ -135,7 +116,6 @@ func (s *FileSource) Stream(ctx context.Context, events chan<- adapter.Event) er
 
 		s.logger.Info("found fixture files", "count", len(files))
 
-		// Process each file
 		var lastTimestamp int64
 		for _, file := range files {
 			select {
@@ -150,7 +130,6 @@ func (s *FileSource) Stream(ctx context.Context, events chan<- adapter.Event) er
 				continue
 			}
 
-			// Apply playback speed delay
 			if s.cfg.PlaybackSpeed > 0 && lastTimestamp > 0 && timestamp > lastTimestamp {
 				delay := time.Duration(float64(timestamp-lastTimestamp)/s.cfg.PlaybackSpeed) * time.Second
 				if delay > 0 && delay < 60*time.Second {
@@ -164,7 +143,6 @@ func (s *FileSource) Stream(ctx context.Context, events chan<- adapter.Event) er
 			}
 			lastTimestamp = timestamp
 
-			// Send events
 			for _, event := range fileEvents {
 				select {
 				case <-ctx.Done():
@@ -189,7 +167,6 @@ func (s *FileSource) Stream(ctx context.Context, events chan<- adapter.Event) er
 	return nil
 }
 
-// findFixtureFiles returns sorted list of fixture files matching the chain.
 func (s *FileSource) findFixtureFiles() ([]string, error) {
 	var files []string
 
@@ -210,15 +187,12 @@ func (s *FileSource) findFixtureFiles() ([]string, error) {
 		return nil, err
 	}
 
-	// Sort by filename (ensures block order with default naming)
 	sort.Strings(files)
 
-	// Filter by chain if configured
 	if s.cfg.Chain != "" {
 		var filtered []string
 		for _, f := range files {
 			base := filepath.Base(f)
-			// Match chain-specific prefixes
 			switch s.cfg.Chain {
 			case "solana":
 				if len(base) > 7 && base[:7] == "solana_" {
@@ -238,7 +212,6 @@ func (s *FileSource) findFixtureFiles() ([]string, error) {
 	return files, nil
 }
 
-// loadFixtureFile loads a fixture file and converts it to adapter events.
 func (s *FileSource) loadFixtureFile(path string) ([]adapter.Event, int64, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -269,7 +242,6 @@ func (s *FileSource) loadFixtureFile(path string) ([]adapter.Event, int64, error
 	return events, timestamp, nil
 }
 
-// parseEVMFixture converts an EVM fixture to adapter events.
 func (s *FileSource) parseEVMFixture(fixture Fixture) ([]adapter.Event, int64, error) {
 	var events []adapter.Event
 	var timestamp int64
@@ -282,7 +254,6 @@ func (s *FileSource) parseEVMFixture(fixture Fixture) ([]adapter.Event, int64, e
 		}
 		timestamp = int64(block.Timestamp)
 
-		// Create a block event
 		events = append(events, adapter.Event{
 			Chain:           "evm",
 			CommitmentLevel: "finalized",
@@ -301,7 +272,7 @@ func (s *FileSource) parseEVMFixture(fixture Fixture) ([]adapter.Event, int64, e
 
 		for _, log := range logs {
 			if log.Removed {
-				continue // Skip removed logs
+				continue
 			}
 
 			events = append(events, adapter.Event{
@@ -324,14 +295,12 @@ func (s *FileSource) parseEVMFixture(fixture Fixture) ([]adapter.Event, int64, e
 		}
 
 	case "transactions":
-		// Transactions can be processed similarly if needed
 		timestamp = fixture.RecordedAt.Unix()
 	}
 
 	return events, timestamp, nil
 }
 
-// parseSolanaFixture converts a Solana fixture to adapter events.
 func (s *FileSource) parseSolanaFixture(fixture Fixture) ([]adapter.Event, int64, error) {
 	var events []adapter.Event
 	var timestamp int64
@@ -344,7 +313,6 @@ func (s *FileSource) parseSolanaFixture(fixture Fixture) ([]adapter.Event, int64
 		}
 		timestamp = block.BlockTime
 
-		// Create a block event
 		events = append(events, adapter.Event{
 			Chain:           "solana",
 			CommitmentLevel: "finalized",
@@ -363,10 +331,9 @@ func (s *FileSource) parseSolanaFixture(fixture Fixture) ([]adapter.Event, int64
 
 		for _, tx := range txs {
 			if tx.Err != "" {
-				continue // Skip failed transactions
+				continue
 			}
 
-			// Get first program ID
 			var programID string
 			if len(tx.ProgramIDs) > 0 {
 				programID = tx.ProgramIDs[0]
@@ -390,12 +357,10 @@ func (s *FileSource) parseSolanaFixture(fixture Fixture) ([]adapter.Event, int64
 		}
 
 	case "account":
-		// Account snapshots don't generate streaming events
 		timestamp = fixture.RecordedAt.Unix()
 	}
 
 	return events, timestamp, nil
 }
 
-// Ensure FileSource implements adapter.Source.
 var _ adapter.Source = (*FileSource)(nil)

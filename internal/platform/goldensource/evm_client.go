@@ -15,7 +15,6 @@ import (
 	protov1 "github.com/marko911/project-pulse/pkg/proto/v1"
 )
 
-// EVMClient implements Client for EVM-compatible chains (Ethereum, Polygon, etc.).
 type EVMClient struct {
 	cfg    *Config
 	logger *slog.Logger
@@ -27,7 +26,6 @@ type EVMClient struct {
 	chainID   *big.Int
 }
 
-// NewEVMClient creates a new EVM golden source client.
 func NewEVMClient(cfg *Config, logger *slog.Logger) *EVMClient {
 	if logger == nil {
 		logger = slog.Default()
@@ -41,17 +39,14 @@ func NewEVMClient(cfg *Config, logger *slog.Logger) *EVMClient {
 	}
 }
 
-// Name returns the client identifier.
 func (c *EVMClient) Name() string {
 	return c.cfg.Name
 }
 
-// Chain returns the chain this client serves.
 func (c *EVMClient) Chain() protov1.Chain {
 	return c.cfg.Chain
 }
 
-// Connect establishes connection to the golden source RPC.
 func (c *EVMClient) Connect(ctx context.Context) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -79,7 +74,6 @@ func (c *EVMClient) Connect(ctx context.Context) error {
 
 		c.client = ethclient.NewClient(c.rpcClient)
 
-		// Verify connection by fetching chain ID
 		c.chainID, err = c.client.ChainID(ctx)
 		if err != nil {
 			c.logger.Warn("chain ID check failed", "error", err)
@@ -98,7 +92,6 @@ func (c *EVMClient) Connect(ctx context.Context) error {
 	return fmt.Errorf("failed to connect after %d attempts: %w", c.cfg.MaxRetries, lastErr)
 }
 
-// Close terminates the connection.
 func (c *EVMClient) Close() error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -113,14 +106,12 @@ func (c *EVMClient) Close() error {
 	return nil
 }
 
-// IsConnected returns the current connection status.
 func (c *EVMClient) IsConnected() bool {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	return c.connected
 }
 
-// GetBlockData retrieves block data for verification.
 func (c *EVMClient) GetBlockData(ctx context.Context, blockNumber uint64) (*BlockData, error) {
 	c.mu.RLock()
 	client := c.client
@@ -130,7 +121,6 @@ func (c *EVMClient) GetBlockData(ctx context.Context, blockNumber uint64) (*Bloc
 		return nil, ErrNotConnected
 	}
 
-	// Create context with timeout
 	if c.cfg.Timeout > 0 {
 		var cancel context.CancelFunc
 		ctx, cancel = context.WithTimeout(ctx, c.cfg.Timeout)
@@ -156,7 +146,6 @@ func (c *EVMClient) GetBlockData(ctx context.Context, blockNumber uint64) (*Bloc
 	}, nil
 }
 
-// GetLatestBlockNumber returns the latest block number from the golden source.
 func (c *EVMClient) GetLatestBlockNumber(ctx context.Context) (uint64, error) {
 	c.mu.RLock()
 	client := c.client
@@ -166,7 +155,6 @@ func (c *EVMClient) GetLatestBlockNumber(ctx context.Context) (uint64, error) {
 		return 0, ErrNotConnected
 	}
 
-	// Create context with timeout
 	if c.cfg.Timeout > 0 {
 		var cancel context.CancelFunc
 		ctx, cancel = context.WithTimeout(ctx, c.cfg.Timeout)
@@ -176,7 +164,6 @@ func (c *EVMClient) GetLatestBlockNumber(ctx context.Context) (uint64, error) {
 	return client.BlockNumber(ctx)
 }
 
-// VerifyBlock compares primary data against golden source data.
 func (c *EVMClient) VerifyBlock(ctx context.Context, primary *BlockData) (*VerificationResult, error) {
 	if primary == nil {
 		return nil, fmt.Errorf("primary block data is nil")
@@ -189,7 +176,6 @@ func (c *EVMClient) VerifyBlock(ctx context.Context, primary *BlockData) (*Verif
 
 	result := Verify(primary, golden)
 
-	// Log verification result
 	if result.Verified {
 		c.logger.Debug("block verified",
 			"block_number", primary.BlockNumber,
@@ -207,7 +193,6 @@ func (c *EVMClient) VerifyBlock(ctx context.Context, primary *BlockData) (*Verif
 	return result, nil
 }
 
-// chainName converts a chain enum to a string.
 func chainName(chain protov1.Chain) string {
 	switch chain {
 	case protov1.Chain_CHAIN_ETHEREUM:
@@ -229,7 +214,6 @@ func chainName(chain protov1.Chain) string {
 	}
 }
 
-// maskURL hides sensitive parts of RPC URLs for logging.
 func maskURL(url string) string {
 	if idx := strings.Index(url, "@"); idx > 0 {
 		return url[:strings.Index(url, "://")+3] + "***@" + url[idx+1:]
@@ -237,7 +221,6 @@ func maskURL(url string) string {
 	return url
 }
 
-// truncateHash safely truncates a hash for logging.
 func truncateHash(hash string) string {
 	if len(hash) > 16 {
 		return hash[:16] + "..."

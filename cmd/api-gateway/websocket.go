@@ -15,14 +15,12 @@ import (
 	protov1 "github.com/marko911/project-pulse/pkg/proto/v1"
 )
 
-// WebSocketHandler handles WebSocket connections and subscription management.
 type WebSocketHandler struct {
 	subManager     *subscription.RedisManager
 	logger         *slog.Logger
-	allowedOrigins []string // nil means allow all origins
+	allowedOrigins []string
 	upgrader       websocket.Upgrader
 
-	// Active connections
 	mu          sync.RWMutex
 	connections map[string]*wsConnection
 }
@@ -35,9 +33,6 @@ type wsConnection struct {
 	mu       sync.Mutex
 }
 
-// NewWebSocketHandler creates a new WebSocket handler.
-// allowedOrigins specifies which origins are allowed to connect via WebSocket.
-// If nil or empty, all origins are allowed.
 func NewWebSocketHandler(subManager *subscription.RedisManager, allowedOrigins []string, logger *slog.Logger) *WebSocketHandler {
 	h := &WebSocketHandler{
 		subManager:     subManager,
@@ -46,7 +41,6 @@ func NewWebSocketHandler(subManager *subscription.RedisManager, allowedOrigins [
 		connections:    make(map[string]*wsConnection),
 	}
 
-	// Configure upgrader with origin check
 	h.upgrader = websocket.Upgrader{
 		ReadBufferSize:  1024,
 		WriteBufferSize: 1024,
@@ -56,31 +50,25 @@ func NewWebSocketHandler(subManager *subscription.RedisManager, allowedOrigins [
 	return h
 }
 
-// checkOrigin validates the request origin against allowed origins.
 func (h *WebSocketHandler) checkOrigin(r *http.Request) bool {
-	// If no allowed origins configured, allow all
 	if len(h.allowedOrigins) == 0 {
 		return true
 	}
 
 	origin := r.Header.Get("Origin")
 	if origin == "" {
-		// No origin header - allow (same-origin requests may not have it)
 		return true
 	}
 
-	// Check against allowed origins
 	for _, allowed := range h.allowedOrigins {
 		if allowed == "*" {
 			return true
 		}
-		// Case-insensitive match
 		if strings.EqualFold(origin, allowed) {
 			return true
 		}
-		// Wildcard subdomain match (e.g., "*.example.com")
 		if strings.HasPrefix(allowed, "*.") {
-			suffix := allowed[1:] // ".example.com"
+			suffix := allowed[1:]
 			if strings.HasSuffix(strings.ToLower(origin), strings.ToLower(suffix)) {
 				return true
 			}
@@ -94,7 +82,6 @@ func (h *WebSocketHandler) checkOrigin(r *http.Request) bool {
 	return false
 }
 
-// HandleConnect upgrades HTTP to WebSocket and manages the connection.
 func (h *WebSocketHandler) HandleConnect(w http.ResponseWriter, r *http.Request) {
 	conn, err := h.upgrader.Upgrade(w, r, nil)
 	if err != nil {
@@ -102,7 +89,6 @@ func (h *WebSocketHandler) HandleConnect(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	// Generate unique client ID
 	clientID := generateClientID()
 
 	wsc := &wsConnection{
@@ -111,14 +97,12 @@ func (h *WebSocketHandler) HandleConnect(w http.ResponseWriter, r *http.Request)
 		send:     make(chan []byte, 256),
 	}
 
-	// Register connection
 	h.mu.Lock()
 	h.connections[clientID] = wsc
 	h.mu.Unlock()
 
 	h.logger.Info("websocket connected", "client_id", clientID)
 
-	// Send welcome message
 	welcome := map[string]interface{}{
 		"type":      "connected",
 		"client_id": clientID,
@@ -128,18 +112,16 @@ func (h *WebSocketHandler) HandleConnect(w http.ResponseWriter, r *http.Request)
 		wsc.send <- data
 	}
 
-	// Start read/write goroutines
 	go h.readPump(wsc)
 	go h.writePump(wsc)
 }
 
-// readPump reads messages from the WebSocket connection.
 func (h *WebSocketHandler) readPump(wsc *wsConnection) {
 	defer func() {
 		h.closeConnection(wsc)
 	}()
 
-	wsc.conn.SetReadLimit(64 * 1024) // 64KB max message size
+	wsc.conn.SetReadLimit(64 * 1024)
 	wsc.conn.SetReadDeadline(time.Now().Add(60 * time.Second))
 	wsc.conn.SetPongHandler(func(string) error {
 		wsc.conn.SetReadDeadline(time.Now().Add(60 * time.Second))
@@ -159,7 +141,6 @@ func (h *WebSocketHandler) readPump(wsc *wsConnection) {
 	}
 }
 
-// writePump writes messages to the WebSocket connection.
 func (h *WebSocketHandler) writePump(wsc *wsConnection) {
 	ticker := time.NewTicker(30 * time.Second)
 	defer func() {
@@ -189,7 +170,6 @@ func (h *WebSocketHandler) writePump(wsc *wsConnection) {
 	}
 }
 
-// handleMessage processes incoming WebSocket messages.
 func (h *WebSocketHandler) handleMessage(wsc *wsConnection, message []byte) {
 	var msg struct {
 		Type string          `json:"type"`
@@ -215,7 +195,6 @@ func (h *WebSocketHandler) handleMessage(wsc *wsConnection, message []byte) {
 	}
 }
 
-// handleSubscribe creates a new subscription for the client.
 func (h *WebSocketHandler) handleSubscribe(wsc *wsConnection, data json.RawMessage) {
 	var req struct {
 		Chains          []string `json:"chains"`
@@ -231,7 +210,6 @@ func (h *WebSocketHandler) handleSubscribe(wsc *wsConnection, data json.RawMessa
 		return
 	}
 
-	// Convert chain names to protov1.Chain
 	chains := make([]protov1.Chain, 0, len(req.Chains))
 	for _, name := range req.Chains {
 		chain := protoChainFromName(name)
@@ -240,7 +218,6 @@ func (h *WebSocketHandler) handleSubscribe(wsc *wsConnection, data json.RawMessa
 		}
 	}
 
-	// Build subscription
 	sub := &subscription.Subscription{
 		ClientID: wsc.clientID,
 		Filter: subscription.Filter{
@@ -251,7 +228,6 @@ func (h *WebSocketHandler) handleSubscribe(wsc *wsConnection, data json.RawMessa
 		},
 	}
 
-	// Set TTL
 	if req.TTLSeconds > 0 {
 		sub.ExpiresAt = time.Now().Add(time.Duration(req.TTLSeconds) * time.Second)
 	}
@@ -284,7 +260,6 @@ func (h *WebSocketHandler) handleSubscribe(wsc *wsConnection, data json.RawMessa
 	})
 }
 
-// handleUnsubscribe removes a subscription.
 func (h *WebSocketHandler) handleUnsubscribe(wsc *wsConnection, data json.RawMessage) {
 	var req struct {
 		SubscriptionID string `json:"subscription_id"`
@@ -319,7 +294,6 @@ func (h *WebSocketHandler) handleUnsubscribe(wsc *wsConnection, data json.RawMes
 	})
 }
 
-// handleListSubscriptions returns all subscriptions for the client.
 func (h *WebSocketHandler) handleListSubscriptions(wsc *wsConnection) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -352,13 +326,10 @@ func (h *WebSocketHandler) handleListSubscriptions(wsc *wsConnection) {
 	})
 }
 
-// RouteEvent routes an event to all clients with matching subscriptions.
-// Called by the NATS consumer when events are received from JetStream.
 func (h *WebSocketHandler) RouteEvent(event *protov1.CanonicalEvent) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	// Find all subscriptions that match this event
 	matches, err := h.subManager.Match(ctx, event)
 	if err != nil {
 		h.logger.Error("failed to find matching subscribers", "error", err)
@@ -369,7 +340,6 @@ func (h *WebSocketHandler) RouteEvent(event *protov1.CanonicalEvent) {
 		return
 	}
 
-	// Send the event to each matching client
 	for _, match := range matches {
 		if err := h.SendEvent(match.ClientID, event); err != nil {
 			h.logger.Warn("failed to send event to client",
@@ -386,14 +356,13 @@ func (h *WebSocketHandler) RouteEvent(event *protov1.CanonicalEvent) {
 	)
 }
 
-// SendEvent sends an event to a specific client.
 func (h *WebSocketHandler) SendEvent(clientID string, event *protov1.CanonicalEvent) error {
 	h.mu.RLock()
 	wsc, ok := h.connections[clientID]
 	h.mu.RUnlock()
 
 	if !ok {
-		return nil // Connection no longer exists
+		return nil
 	}
 
 	data, err := json.Marshal(map[string]interface{}{
@@ -414,7 +383,6 @@ func (h *WebSocketHandler) SendEvent(clientID string, event *protov1.CanonicalEv
 		return err
 	}
 
-	// Non-blocking send
 	select {
 	case wsc.send <- data:
 	default:
@@ -424,7 +392,6 @@ func (h *WebSocketHandler) SendEvent(clientID string, event *protov1.CanonicalEv
 	return nil
 }
 
-// closeConnection cleans up when a connection closes.
 func (h *WebSocketHandler) closeConnection(wsc *wsConnection) {
 	wsc.mu.Lock()
 	if wsc.closed {
@@ -434,12 +401,10 @@ func (h *WebSocketHandler) closeConnection(wsc *wsConnection) {
 	wsc.closed = true
 	wsc.mu.Unlock()
 
-	// Remove from connections map
 	h.mu.Lock()
 	delete(h.connections, wsc.clientID)
 	h.mu.Unlock()
 
-	// Clean up subscriptions
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
@@ -453,7 +418,6 @@ func (h *WebSocketHandler) closeConnection(wsc *wsConnection) {
 	h.logger.Info("websocket disconnected", "client_id", wsc.clientID)
 }
 
-// sendMessage sends a typed message to the client.
 func (h *WebSocketHandler) sendMessage(wsc *wsConnection, msgType string, data interface{}) {
 	msg := map[string]interface{}{
 		"type":      msgType,
@@ -476,7 +440,6 @@ func (h *WebSocketHandler) sendMessage(wsc *wsConnection, msgType string, data i
 	}
 }
 
-// sendError sends an error message to the client.
 func (h *WebSocketHandler) sendError(wsc *wsConnection, code string, message string) {
 	h.sendMessage(wsc, "error", map[string]interface{}{
 		"code":    code,
@@ -484,19 +447,16 @@ func (h *WebSocketHandler) sendError(wsc *wsConnection, code string, message str
 	})
 }
 
-// ConnectionCount returns the number of active connections.
 func (h *WebSocketHandler) ConnectionCount() int {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 	return len(h.connections)
 }
 
-// generateClientID creates a unique client identifier.
 func generateClientID() string {
 	return time.Now().Format("20060102150405") + "_" + randomString(8)
 }
 
-// randomString generates a random alphanumeric string.
 func randomString(n int) string {
 	const chars = "abcdefghijklmnopqrstuvwxyz0123456789"
 	b := make([]byte, n)
@@ -507,7 +467,6 @@ func randomString(n int) string {
 	return string(b)
 }
 
-// protoCommitmentFromName converts a commitment level name to proto enum.
 func protoCommitmentFromName(name string) protov1.CommitmentLevel {
 	switch name {
 	case "processed":
@@ -521,7 +480,6 @@ func protoCommitmentFromName(name string) protov1.CommitmentLevel {
 	}
 }
 
-// chainNamesFromProtos converts proto chains to name strings.
 func chainNamesFromProtos(chains []protov1.Chain) []string {
 	names := make([]string, 0, len(chains))
 	for _, chain := range chains {

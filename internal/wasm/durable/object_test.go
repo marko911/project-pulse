@@ -9,7 +9,6 @@ import (
 )
 
 func TestObject_StateOperations(t *testing.T) {
-	// Start miniredis for testing
 	mr, err := miniredis.Run()
 	if err != nil {
 		t.Fatalf("Failed to start miniredis: %v", err)
@@ -28,14 +27,12 @@ func TestObject_StateOperations(t *testing.T) {
 
 	ctx := context.Background()
 
-	// Get an object
 	obj, err := runtime.Get(ctx, "test-ns", "obj-1", "tenant-1")
 	if err != nil {
 		t.Fatalf("Failed to get object: %v", err)
 	}
 	defer obj.Close(ctx)
 
-	// Test Put and Get
 	if err := obj.Put("key1", []byte("value1")); err != nil {
 		t.Errorf("Put failed: %v", err)
 	}
@@ -45,7 +42,6 @@ func TestObject_StateOperations(t *testing.T) {
 		t.Errorf("Get failed: got %v, %v", string(val), ok)
 	}
 
-	// Test GetString
 	if err := obj.PutString("key2", "hello"); err != nil {
 		t.Errorf("PutString failed: %v", err)
 	}
@@ -55,7 +51,6 @@ func TestObject_StateOperations(t *testing.T) {
 		t.Errorf("GetString failed: got %v, %v", str, ok)
 	}
 
-	// Test GetJSON and PutJSON
 	type TestData struct {
 		Name  string `json:"name"`
 		Value int    `json:"value"`
@@ -74,7 +69,6 @@ func TestObject_StateOperations(t *testing.T) {
 		t.Errorf("GetJSON returned wrong value: %+v", retrieved)
 	}
 
-	// Test Delete
 	if err := obj.Delete("key1"); err != nil {
 		t.Errorf("Delete failed: %v", err)
 	}
@@ -84,13 +78,11 @@ func TestObject_StateOperations(t *testing.T) {
 		t.Error("Key should not exist after delete")
 	}
 
-	// Test List
 	keys := obj.List()
-	if len(keys) != 2 { // key2 and key3
+	if len(keys) != 2 {
 		t.Errorf("List returned wrong number of keys: %d", len(keys))
 	}
 
-	// Test ListPrefix
 	if err := obj.PutString("prefix:a", "a"); err != nil {
 		t.Errorf("PutString failed: %v", err)
 	}
@@ -122,7 +114,6 @@ func TestObject_Persistence(t *testing.T) {
 
 	ctx := context.Background()
 
-	// Create object and set state
 	obj1, err := runtime.Get(ctx, "persist-ns", "persist-1", "tenant-1")
 	if err != nil {
 		t.Fatalf("Failed to get object: %v", err)
@@ -132,12 +123,10 @@ func TestObject_Persistence(t *testing.T) {
 		t.Errorf("PutString failed: %v", err)
 	}
 
-	// Close to persist
 	if err := obj1.Close(ctx); err != nil {
 		t.Errorf("Close failed: %v", err)
 	}
 
-	// Reopen and verify state persisted
 	obj2, err := runtime.Get(ctx, "persist-ns", "persist-1", "tenant-1")
 	if err != nil {
 		t.Fatalf("Failed to get object again: %v", err)
@@ -171,7 +160,6 @@ func TestObject_TenantIsolation(t *testing.T) {
 
 	ctx := context.Background()
 
-	// Create object for tenant-1
 	obj1, err := runtime.Get(ctx, "tenant-ns", "shared-obj", "tenant-1")
 	if err != nil {
 		t.Fatalf("Failed to get object for tenant-1: %v", err)
@@ -185,13 +173,11 @@ func TestObject_TenantIsolation(t *testing.T) {
 		t.Errorf("Close failed: %v", err)
 	}
 
-	// Try to access same object with different tenant
 	_, err = runtime.Get(ctx, "tenant-ns", "shared-obj", "tenant-2")
 	if err != ErrTenantMismatch {
 		t.Errorf("Expected ErrTenantMismatch, got: %v", err)
 	}
 
-	// Access with correct tenant should work
 	obj3, err := runtime.Get(ctx, "tenant-ns", "shared-obj", "tenant-1")
 	if err != nil {
 		t.Fatalf("Failed to get object for tenant-1 again: %v", err)
@@ -229,7 +215,6 @@ func TestObject_Transaction(t *testing.T) {
 	}
 	defer obj.Close(ctx)
 
-	// Execute transaction
 	err = obj.Transaction(ctx, func(s StateWriter) error {
 		s.PutString("counter", "0")
 		s.PutString("name", "test")
@@ -239,7 +224,6 @@ func TestObject_Transaction(t *testing.T) {
 		t.Errorf("Transaction failed: %v", err)
 	}
 
-	// Verify transaction committed
 	val, _ := obj.GetString("counter")
 	if val != "0" {
 		t.Errorf("Expected counter=0, got %v", val)
@@ -273,7 +257,6 @@ func TestStorage_WASMInterface(t *testing.T) {
 
 	storage := NewStorage(obj)
 
-	// Test through Storage interface
 	if err := storage.Put("key", []byte("value")); err != nil {
 		t.Errorf("Storage.Put failed: %v", err)
 	}
@@ -283,13 +266,11 @@ func TestStorage_WASMInterface(t *testing.T) {
 		t.Errorf("Storage.Get failed: %v, %v", err, string(val))
 	}
 
-	// Get non-existent key should return nil
 	val, err = storage.Get("nonexistent")
 	if err != nil || val != nil {
 		t.Errorf("Storage.Get for nonexistent key should return nil: %v, %v", err, val)
 	}
 
-	// Test List
 	storage.Put("list:a", []byte("a"))
 	storage.Put("list:b", []byte("b"))
 
@@ -298,7 +279,6 @@ func TestStorage_WASMInterface(t *testing.T) {
 		t.Errorf("Storage.List failed: %v, %d", err, len(keys))
 	}
 
-	// Test Delete
 	if err := storage.Delete("key"); err != nil {
 		t.Errorf("Storage.Delete failed: %v", err)
 	}

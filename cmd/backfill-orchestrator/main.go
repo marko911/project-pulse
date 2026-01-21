@@ -1,14 +1,3 @@
-// Command backfill-orchestrator coordinates gap recovery by triggering targeted block re-ingestion.
-//
-// This service:
-// 1. Consumes gap events from the gap-events topic
-// 2. Creates backfill requests for missing block ranges
-// 3. Publishes requests to backfill-requests topic for adapters to consume
-// 4. Tracks backfill progress and handles retries
-//
-// Usage:
-//
-//	backfill-orchestrator --brokers=localhost:9092
 package main
 
 import (
@@ -27,7 +16,6 @@ import (
 )
 
 func main() {
-	// Configuration flags
 	var (
 		brokers       = flag.String("brokers", envOrDefault("KAFKA_BROKERS", "localhost:9092"), "Kafka/Redpanda brokers (comma-separated)")
 		gapTopic      = flag.String("gap-topic", envOrDefault("GAP_EVENTS_TOPIC", "gap-events"), "Topic to consume gap events from")
@@ -40,7 +28,6 @@ func main() {
 	)
 	flag.Parse()
 
-	// Setup structured logging
 	logger := setupLogger(*logLevel)
 	slog.SetDefault(logger)
 
@@ -54,13 +41,11 @@ func main() {
 		"metrics_addr", *metricsAddr,
 	)
 
-	// Parse brokers
 	brokerList := strings.Split(*brokers, ",")
 	for i := range brokerList {
 		brokerList[i] = strings.TrimSpace(brokerList[i])
 	}
 
-	// Create orchestrator configuration
 	cfg := backfill.OrchestratorConfig{
 		Brokers:               brokerList,
 		GapEventsTopic:        *gapTopic,
@@ -72,14 +57,12 @@ func main() {
 		MaxConcurrentBackfills: 10,
 	}
 
-	// Create orchestrator
 	orchestrator, err := backfill.NewOrchestrator(cfg, logger)
 	if err != nil {
 		slog.Error("failed to create orchestrator", "error", err)
 		os.Exit(1)
 	}
 
-	// Setup context with signal handling
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -92,12 +75,10 @@ func main() {
 		cancel()
 	}()
 
-	// Start metrics server
 	if *metricsAddr != "" {
 		go runMetricsServer(*metricsAddr, orchestrator, logger)
 	}
 
-	// Start the orchestrator
 	if err := orchestrator.Start(ctx); err != nil {
 		slog.Error("failed to start orchestrator", "error", err)
 		os.Exit(1)
@@ -105,13 +86,11 @@ func main() {
 
 	slog.Info("backfill orchestrator running, consuming gap events...")
 
-	// Run until shutdown
 	if err := orchestrator.Run(ctx); err != nil && ctx.Err() == nil {
 		slog.Error("orchestrator error", "error", err)
 		os.Exit(1)
 	}
 
-	// Graceful shutdown
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer shutdownCancel()
 
@@ -119,7 +98,6 @@ func main() {
 		slog.Error("shutdown error", "error", err)
 	}
 
-	// Log final stats
 	stats := orchestrator.GetStats()
 	slog.Info("backfill orchestrator shutdown",
 		"gaps_received", stats.GapsReceived,
@@ -130,17 +108,14 @@ func main() {
 	)
 }
 
-// runMetricsServer runs the HTTP metrics server.
 func runMetricsServer(addr string, orchestrator *backfill.Orchestrator, logger *slog.Logger) {
 	mux := http.NewServeMux()
 
-	// Health endpoint
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte(`{"status":"healthy"}`))
 	})
 
-	// Metrics endpoint
 	mux.HandleFunc("/metrics", func(w http.ResponseWriter, r *http.Request) {
 		stats := orchestrator.GetStats()
 		metrics := map[string]interface{}{
@@ -168,7 +143,6 @@ func runMetricsServer(addr string, orchestrator *backfill.Orchestrator, logger *
 	}
 }
 
-// setupLogger creates a structured logger with the given level.
 func setupLogger(levelStr string) *slog.Logger {
 	var level slog.Level
 	switch strings.ToLower(levelStr) {
@@ -187,7 +161,6 @@ func setupLogger(levelStr string) *slog.Logger {
 	}))
 }
 
-// envOrDefault returns environment variable value or default.
 func envOrDefault(key, defaultVal string) string {
 	if val := os.Getenv(key); val != "" {
 		return val
@@ -195,7 +168,6 @@ func envOrDefault(key, defaultVal string) string {
 	return defaultVal
 }
 
-// envOrDefaultInt returns environment variable as int or default.
 func envOrDefaultInt(key string, defaultVal int) int {
 	if val := os.Getenv(key); val != "" {
 		var result int

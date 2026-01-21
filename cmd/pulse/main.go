@@ -1,15 +1,3 @@
-// Command pulse is the CLI for managing Pulse deployments.
-//
-// Usage:
-//
-//	pulse deploy <wasm-file> --name <name> [--version <version>]
-//	pulse functions list
-//	pulse functions get <id>
-//	pulse functions delete <id>
-//	pulse triggers list
-//	pulse triggers create --function-id <id> --name <name> --event-type <type>
-//	pulse triggers get <id>
-//	pulse triggers delete <id>
 package main
 
 import (
@@ -152,11 +140,9 @@ func deployCmd(args []string) {
 	wasmPath := fs.Arg(0)
 
 	if *name == "" {
-		// Default name from filename
 		*name = strings.TrimSuffix(filepath.Base(wasmPath), ".wasm")
 	}
 
-	// Validate file exists
 	stat, err := os.Stat(wasmPath)
 	if err != nil {
 		fmt.Printf("Error: cannot access file: %v\n", err)
@@ -170,7 +156,6 @@ func deployCmd(args []string) {
 
 	fmt.Printf("Deploying %s (%d bytes)...\n", filepath.Base(wasmPath), stat.Size())
 
-	// Open file
 	file, err := os.Open(wasmPath)
 	if err != nil {
 		fmt.Printf("Error: cannot open file: %v\n", err)
@@ -178,11 +163,9 @@ func deployCmd(args []string) {
 	}
 	defer file.Close()
 
-	// Create multipart form
 	var buf bytes.Buffer
 	writer := multipart.NewWriter(&buf)
 
-	// Add file
 	part, err := writer.CreateFormFile("file", filepath.Base(wasmPath))
 	if err != nil {
 		fmt.Printf("Error: cannot create form: %v\n", err)
@@ -193,7 +176,6 @@ func deployCmd(args []string) {
 		os.Exit(1)
 	}
 
-	// Add metadata
 	writer.WriteField("name", *name)
 	writer.WriteField("version", *version)
 	if *description != "" {
@@ -201,7 +183,6 @@ func deployCmd(args []string) {
 	}
 	writer.Close()
 
-	// Make request
 	req, err := http.NewRequest("POST", apiEndpoint+"/api/v1/functions", &buf)
 	if err != nil {
 		fmt.Printf("Error: cannot create request: %v\n", err)
@@ -386,8 +367,6 @@ func envOrDefault(key, defaultVal string) string {
 	return defaultVal
 }
 
-// Trigger commands
-
 func triggersCmd(subCmd string, args []string) {
 	switch subCmd {
 	case "list":
@@ -486,7 +465,6 @@ func createTrigger(args []string) {
 		os.Exit(1)
 	}
 
-	// Build request body
 	body := map[string]interface{}{
 		"name":        *name,
 		"event_type":  *eventType,
@@ -504,7 +482,6 @@ func createTrigger(args []string) {
 
 	jsonBody, _ := json.Marshal(body)
 
-	// Create trigger via function-specific endpoint
 	url := fmt.Sprintf("%s/api/v1/functions/%s/triggers", apiEndpoint, *functionID)
 	req, err := http.NewRequest("POST", url, bytes.NewReader(jsonBody))
 	if err != nil {
@@ -631,14 +608,11 @@ func deleteTrigger(id string) {
 	fmt.Printf("Trigger %s deleted successfully.\n", id)
 }
 
-// Logs command
-
 func logsCmd(args []string) {
 	fs := flag.NewFlagSet("logs", flag.ExitOnError)
 	limit := fs.Int("limit", 50, "Number of logs to show (max: 100)")
 	errorsOnly := fs.Bool("errors", false, "Show only failed invocations")
 
-	// Parse flags after the function ID
 	functionID := args[0]
 	fs.Parse(args[1:])
 
@@ -695,7 +669,6 @@ func getLogs(functionID string, limit int, errorsOnly bool) {
 		return
 	}
 
-	// Filter errors if requested
 	invocations := result.Invocations
 	if errorsOnly {
 		filtered := make([]struct {
@@ -773,8 +746,6 @@ func formatBytes(bytes int64) string {
 	return fmt.Sprintf("%.1f%cB", float64(bytes)/float64(div), "KMGTPE"[exp])
 }
 
-// Dev command - watch and auto-deploy
-
 func devCmd(args []string) {
 	fs := flag.NewFlagSet("dev", flag.ExitOnError)
 	name := fs.String("name", "", "Function name (default: filename without extension)")
@@ -790,7 +761,6 @@ func devCmd(args []string) {
 
 	wasmPath := fs.Arg(0)
 
-	// Validate file exists
 	stat, err := os.Stat(wasmPath)
 	if err != nil {
 		fmt.Printf("Error: cannot access file: %v\n", err)
@@ -811,18 +781,15 @@ func devCmd(args []string) {
 	fmt.Printf("   Poll interval: %ds\n", *interval)
 	fmt.Println("   Press Ctrl+C to stop")
 
-	// Get absolute path for consistency
 	absPath, err := filepath.Abs(wasmPath)
 	if err != nil {
 		absPath = wasmPath
 	}
 
-	// Track last modification time and hash
 	lastModTime := stat.ModTime()
 	lastHash := hashFile(absPath)
 	deployCount := 0
 
-	// Initial deploy
 	fmt.Println("📦 Initial deployment...")
 	if err := deployFile(absPath, *name); err != nil {
 		fmt.Printf("❌ Deploy failed: %v\n", err)
@@ -831,7 +798,6 @@ func devCmd(args []string) {
 		fmt.Printf("✅ Deployed v%d\n\n", deployCount)
 	}
 
-	// Watch loop
 	ticker := time.NewTicker(time.Duration(*interval) * time.Second)
 	defer ticker.Stop()
 
@@ -842,9 +808,7 @@ func devCmd(args []string) {
 			continue
 		}
 
-		// Check if file was modified
 		if stat.ModTime().After(lastModTime) {
-			// Verify content actually changed (not just touch)
 			newHash := hashFile(absPath)
 			if newHash != lastHash {
 				lastModTime = stat.ModTime()
@@ -872,7 +836,7 @@ func hashFile(path string) string {
 		return ""
 	}
 	h := sha256.Sum256(data)
-	return hex.EncodeToString(h[:8]) // First 8 bytes is enough for change detection
+	return hex.EncodeToString(h[:8])
 }
 
 func deployFile(wasmPath, name string) error {
@@ -882,7 +846,6 @@ func deployFile(wasmPath, name string) error {
 	}
 	defer file.Close()
 
-	// Create multipart form
 	var buf bytes.Buffer
 	writer := multipart.NewWriter(&buf)
 
@@ -898,7 +861,6 @@ func deployFile(wasmPath, name string) error {
 	writer.WriteField("version", "dev")
 	writer.Close()
 
-	// Make request
 	req, err := http.NewRequest("POST", apiEndpoint+"/api/v1/functions", &buf)
 	if err != nil {
 		return fmt.Errorf("cannot create request: %w", err)

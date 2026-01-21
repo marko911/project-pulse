@@ -9,7 +9,6 @@ import (
 	protov1 "github.com/marko911/project-pulse/pkg/proto/v1"
 )
 
-// mockClient implements Client for testing.
 type mockClient struct {
 	name      string
 	chain     protov1.Chain
@@ -82,7 +81,6 @@ func TestVerifier_BasicVerification(t *testing.T) {
 		t.Fatalf("failed to connect: %v", err)
 	}
 
-	// Verify matching block
 	primary := &BlockData{
 		Chain:            protov1.Chain_CHAIN_ETHEREUM,
 		BlockNumber:      100,
@@ -131,7 +129,6 @@ func TestVerifier_FailClosed(t *testing.T) {
 		t.Fatalf("failed to connect: %v", err)
 	}
 
-	// Verify mismatching block
 	primary := &BlockData{
 		Chain:            protov1.Chain_CHAIN_ETHEREUM,
 		BlockNumber:      100,
@@ -148,7 +145,6 @@ func TestVerifier_FailClosed(t *testing.T) {
 		t.Error("expected verification to fail")
 	}
 
-	// Verify that verifier is now halted
 	if !verifier.IsHalted() {
 		t.Error("expected verifier to be halted")
 	}
@@ -156,7 +152,6 @@ func TestVerifier_FailClosed(t *testing.T) {
 		t.Error("expected halt reason to be set")
 	}
 
-	// Subsequent verifications should fail immediately
 	_, err = verifier.VerifyBlock(ctx, primary)
 	if err == nil {
 		t.Error("expected error for verification while halted")
@@ -187,7 +182,6 @@ func TestVerifier_ResolveFailure(t *testing.T) {
 	verifier.RegisterClient(mock)
 	mock.Connect(ctx)
 
-	// Trigger failure
 	primary := &BlockData{
 		Chain:            protov1.Chain_CHAIN_ETHEREUM,
 		BlockNumber:      100,
@@ -201,7 +195,6 @@ func TestVerifier_ResolveFailure(t *testing.T) {
 		t.Error("expected verifier to be halted")
 	}
 
-	// Resolve failure
 	if err := verifier.ResolveFailure("issue investigated and fixed"); err != nil {
 		t.Errorf("failed to resolve: %v", err)
 	}
@@ -210,7 +203,6 @@ func TestVerifier_ResolveFailure(t *testing.T) {
 		t.Error("expected verifier to be resumed")
 	}
 
-	// Now update the golden source with correct data and verify again
 	mock.blocks[100].BlockHash = "0xCORRECT"
 	primary.BlockHash = "0xCORRECT"
 
@@ -238,12 +230,11 @@ func TestVerifier_SampledVerification(t *testing.T) {
 	}
 
 	cfg := DefaultVerifierConfig()
-	cfg.VerifyEveryNthBlock = 5 // Only verify every 5th block
+	cfg.VerifyEveryNthBlock = 5
 	verifier := NewVerifier(cfg, logger)
 	verifier.RegisterClient(mock)
 	mock.Connect(ctx)
 
-	// Verify blocks 100-110
 	for i := uint64(100); i <= 110; i++ {
 		primary := &BlockData{
 			Chain:       protov1.Chain_CHAIN_ETHEREUM,
@@ -255,7 +246,6 @@ func TestVerifier_SampledVerification(t *testing.T) {
 	}
 
 	stats := verifier.Stats()
-	// Blocks 100, 105, 110 should be verified (multiples of 5)
 	if stats.BlocksVerified != 3 {
 		t.Errorf("expected 3 blocks verified, got %d", stats.BlocksVerified)
 	}

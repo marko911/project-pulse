@@ -1,22 +1,9 @@
-// k6 Burst Simulation Load Test
-// Project Pulse - Milestone 4: Performance & WebSocket Scale
-//
-// Simulates high-throughput ingestion bursts to test system resilience
-// during traffic spikes. Tests both WebSocket delivery and HTTP endpoints
-// under burst conditions.
-//
-// Usage:
-//   k6 run burst_simulation.js                        # Default burst test
-//   k6 run -e BURST_RATIO=20 burst_simulation.js      # 20x burst ratio
-//   k6 run -e BURST_DURATION=30 burst_simulation.js   # 30s burst windows
-
 import ws from 'k6/ws';
 import http from 'k6/http';
 import { check, sleep, group } from 'k6';
 import { Counter, Trend, Rate, Gauge } from 'k6/metrics';
 import { config, generateEvent, randomAccount } from './config.js';
 
-// Custom metrics for burst analysis
 const burstEventsReceived = new Counter('burst_events_received_total');
 const burstEventLatency = new Trend('burst_event_latency_ms');
 const burstDroppedEvents = new Counter('burst_dropped_events_total');
@@ -24,22 +11,19 @@ const burstRecoveryTime = new Trend('burst_recovery_time_ms');
 const burstErrorRate = new Rate('burst_error_rate');
 const currentBurstPhase = new Gauge('current_burst_phase');
 
-// Burst configuration
-const burstRatio = parseInt(__ENV.BURST_RATIO) || 10; // 10x normal rate during burst
-const burstDuration = parseInt(__ENV.BURST_DURATION) || 10; // seconds
-const normalDuration = parseInt(__ENV.NORMAL_DURATION) || 30; // seconds between bursts
-const totalCycles = parseInt(__ENV.TOTAL_CYCLES) || 5; // number of burst cycles
+const burstRatio = parseInt(__ENV.BURST_RATIO) || 10;
+const burstDuration = parseInt(__ENV.BURST_DURATION) || 10;
+const normalDuration = parseInt(__ENV.NORMAL_DURATION) || 30;
+const totalCycles = parseInt(__ENV.TOTAL_CYCLES) || 5;
 
 export const options = {
   scenarios: {
-    // WebSocket receivers - maintain constant connections
     websocket_receivers: {
       executor: 'constant-vus',
       vus: 100,
       duration: `${(burstDuration + normalDuration) * totalCycles + 60}s`,
       exec: 'websocketReceiver',
     },
-    // HTTP health monitors - verify system stays responsive
     http_monitors: {
       executor: 'constant-vus',
       vus: 10,
@@ -50,16 +34,14 @@ export const options = {
   },
   thresholds: {
     burst_event_latency_ms: ['p(99)<100', 'p(95)<50'],
-    burst_error_rate: ['rate<0.01'], // Allow 1% errors during bursts
-    burst_recovery_time_ms: ['avg<5000'], // Recover within 5 seconds
+    burst_error_rate: ['rate<0.01'],
+    burst_recovery_time_ms: ['avg<5000'],
   },
 };
 
-// Track burst phases globally
 let burstStartTime = null;
 let inBurst = false;
 
-// WebSocket receiver function
 export function websocketReceiver() {
   const wsUrl = config.wsUrl;
   let eventCount = 0;
@@ -67,7 +49,6 @@ export function websocketReceiver() {
 
   const res = ws.connect(wsUrl, {}, function (socket) {
     socket.on('open', function () {
-      // Subscribe to all events for burst testing
       socket.send(
         JSON.stringify({
           type: 'subscribe',
@@ -89,17 +70,14 @@ export function websocketReceiver() {
           eventCount++;
           burstEventsReceived.add(1);
 
-          // Measure inter-event latency during bursts
           if (inBurst && msg.data && msg.data.timestamp) {
             const eventTs = new Date(msg.data.timestamp).getTime();
             const latency = now - eventTs;
             burstEventLatency.add(latency);
           }
 
-          // Track gap between events for recovery analysis
           const gap = now - lastEventTime;
           if (gap > 1000) {
-            // Gap > 1 second might indicate dropped events
             burstRecoveryTime.add(gap);
           }
           lastEventTime = now;
@@ -115,12 +93,10 @@ export function websocketReceiver() {
       burstErrorRate.add(1);
     });
 
-    // Ping to keep alive
     socket.setInterval(function () {
       socket.send(JSON.stringify({ type: 'ping', data: {} }));
     }, 30000);
 
-    // Run for full duration
     const duration = (burstDuration + normalDuration) * totalCycles * 1000 + 30000;
     socket.setTimeout(function () {
       socket.close();
@@ -132,7 +108,6 @@ export function websocketReceiver() {
   });
 }
 
-// HTTP monitor to verify system responsiveness during bursts
 export function httpMonitor() {
   const baseUrl = config.httpUrl;
 
@@ -188,11 +163,9 @@ export function httpMonitor() {
     }
   });
 
-  // Poll more frequently during expected burst windows
   sleep(1);
 }
 
-// Setup function - log burst configuration
 export function setup() {
   console.log('='.repeat(60));
   console.log('Burst Simulation Configuration');
@@ -213,7 +186,6 @@ export function setup() {
   };
 }
 
-// Teardown - analyze burst behavior
 export function teardown(data) {
   const elapsed = Date.now() - data.startTime;
   console.log('='.repeat(60));

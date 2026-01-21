@@ -107,7 +107,6 @@ func TestBuildManifest(t *testing.T) {
 func TestBuildManifest_EventsSortedByTxAndEventIndex(t *testing.T) {
 	b := &Builder{}
 
-	// Events out of order
 	agg := &blockAggregator{
 		chain:          protov1.Chain_CHAIN_SOLANA,
 		blockNumber:    999,
@@ -122,9 +121,6 @@ func TestBuildManifest_EventsSortedByTxAndEventIndex(t *testing.T) {
 	}
 
 	manifest := b.buildManifest(agg)
-
-	// The hash should be deterministic regardless of input order
-	// because buildManifest sorts events before hashing
 
 	agg2 := &blockAggregator{
 		chain:          protov1.Chain_CHAIN_SOLANA,

@@ -4,7 +4,6 @@ import (
 	"time"
 )
 
-// OutboxStatus represents the processing state of an outbox message.
 type OutboxStatus string
 
 const (
@@ -14,7 +13,6 @@ const (
 	OutboxStatusFailed     OutboxStatus = "failed"
 )
 
-// EventRecord represents a canonical event stored in the database.
 type EventRecord struct {
 	EventID         string    `db:"event_id"`
 	Chain           int16     `db:"chain"`
@@ -26,7 +24,7 @@ type EventRecord struct {
 	EventIndex      int32     `db:"event_index"`
 	EventType       string    `db:"event_type"`
 	ProgramID       *string   `db:"program_id"`
-	Accounts        []byte    `db:"accounts"` // JSONB
+	Accounts        []byte    `db:"accounts"`
 	Payload         []byte    `db:"payload"`
 	CommitmentLevel int16     `db:"commitment_level"`
 	ReorgAction     int16     `db:"reorg_action"`
@@ -37,7 +35,6 @@ type EventRecord struct {
 	CreatedAt       time.Time `db:"created_at"`
 }
 
-// OutboxMessage represents a message in the transactional outbox.
 type OutboxMessage struct {
 	ID           int64        `db:"id"`
 	EventID      string       `db:"event_id"`
@@ -55,13 +52,11 @@ type OutboxMessage struct {
 	PublishedAt  *time.Time   `db:"published_at"`
 }
 
-// EventWithOutbox bundles an event with its outbox message for atomic writes.
 type EventWithOutbox struct {
 	Event  EventRecord
 	Outbox OutboxMessage
 }
 
-// FunctionStatus represents the state of a function.
 type FunctionStatus string
 
 const (
@@ -70,7 +65,6 @@ const (
 	FunctionStatusDeleted  FunctionStatus = "deleted"
 )
 
-// Function represents a WASM function definition.
 type Function struct {
 	ID             string         `db:"id"`
 	TenantID       string         `db:"tenant_id"`
@@ -87,7 +81,6 @@ type Function struct {
 	UpdatedAt      time.Time      `db:"updated_at"`
 }
 
-// TriggerStatus represents the state of a trigger.
 type TriggerStatus string
 
 const (
@@ -96,7 +89,6 @@ const (
 	TriggerStatusDeleted  TriggerStatus = "deleted"
 )
 
-// Trigger maps events to function invocations.
 type Trigger struct {
 	ID            string        `db:"id"`
 	FunctionID    string        `db:"function_id"`
@@ -115,7 +107,6 @@ type Trigger struct {
 	UpdatedAt     time.Time     `db:"updated_at"`
 }
 
-// DeploymentStatus represents the state of a deployment.
 type DeploymentStatus string
 
 const (
@@ -125,7 +116,6 @@ const (
 	DeploymentStatusFailed     DeploymentStatus = "failed"
 )
 
-// Deployment tracks function deployment history.
 type Deployment struct {
 	ID             string           `db:"id"`
 	FunctionID     string           `db:"function_id"`
@@ -143,7 +133,6 @@ type Deployment struct {
 	ActivatedAt    *time.Time       `db:"activated_at"`
 }
 
-// Invocation tracks function execution history.
 type Invocation struct {
 	ID           string    `db:"id"`
 	FunctionID   string    `db:"function_id"`

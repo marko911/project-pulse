@@ -1,7 +1,3 @@
-// Command function-api provides the API for WASM function management.
-//
-// This service handles function uploads, trigger management, and function metadata.
-// Functions are stored in MinIO/S3 and registered in the database.
 package main
 
 import (
@@ -27,7 +23,6 @@ func main() {
 	flag.StringVar(&cfg.RedisAddr, "redis-addr", envOrDefault("REDIS_ADDR", "localhost:6379"), "Redis address")
 	flag.StringVar(&cfg.RedisPassword, "redis-password", envOrDefault("REDIS_PASSWORD", ""), "Redis password")
 
-	// Database configuration
 	flag.StringVar(&cfg.DBHost, "db-host", envOrDefault("DB_HOST", "localhost"), "Database host")
 	flag.IntVar(&cfg.DBPort, "db-port", envOrDefaultInt("DB_PORT", 5432), "Database port")
 	flag.StringVar(&cfg.DBUser, "db-user", envOrDefault("DB_USER", "pulse"), "Database user")
@@ -45,7 +40,6 @@ func main() {
 	}
 }
 
-// Config holds configuration for the function API.
 type Config struct {
 	ListenAddr     string
 	MinIOEndpoint  string
@@ -56,7 +50,6 @@ type Config struct {
 	RedisAddr      string
 	RedisPassword  string
 
-	// Database
 	DBHost     string
 	DBPort     int
 	DBUser     string
@@ -68,22 +61,19 @@ func run(cfg Config, logger *slog.Logger) error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	// Create server
 	server, err := NewServer(ctx, cfg, logger)
 	if err != nil {
 		return fmt.Errorf("create server: %w", err)
 	}
 	defer server.Close()
 
-	// Set up HTTP server
 	httpServer := &http.Server{
 		Addr:         cfg.ListenAddr,
 		Handler:      server.Router(),
 		ReadTimeout:  30 * time.Second,
-		WriteTimeout: 60 * time.Second, // Longer for uploads
+		WriteTimeout: 60 * time.Second,
 	}
 
-	// Handle shutdown signals
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 

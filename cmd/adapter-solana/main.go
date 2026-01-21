@@ -1,7 +1,3 @@
-// Command adapter-solana runs the Solana blockchain adapter service.
-//
-// This adapter connects to Solana via Yellowstone/Geyser gRPC (default) or
-// standard WebSockets (legacy/free tier).
 package main
 
 import (
@@ -22,14 +18,12 @@ import (
 	"github.com/marko911/project-pulse/internal/adapter/solana_ws"
 )
 
-// AdapterInterface defines the common interface for Solana adapters
 type AdapterInterface interface {
 	Start(ctx context.Context, events chan<- adapter.Event) error
 	Stop(ctx context.Context) error
 }
 
 func main() {
-	// Configuration flags
 	adapterType := flag.String("type", getEnv("SOLANA_ADAPTER_TYPE", "grpc"), "Adapter type: grpc (Geyser) or ws (WebSocket)")
 	geyserEndpoint := flag.String("geyser-endpoint", getEnv("GEYSER_ENDPOINT", "http://localhost:10000"), "Yellowstone/Geyser gRPC endpoint")
 	geyserToken := flag.String("geyser-token", getEnv("GEYSER_TOKEN", ""), "Geyser authentication token")
@@ -40,7 +34,6 @@ func main() {
 	logLevel := flag.String("log-level", getEnv("LOG_LEVEL", "info"), "Log level: debug, info, warn, error")
 	flag.Parse()
 
-	// Setup structured logging
 	var level slog.Level
 	switch *logLevel {
 	case "debug":
@@ -60,7 +53,6 @@ func main() {
 
 	var adpt AdapterInterface
 
-	// Initialize the requested adapter type
 	if *adapterType == "ws" {
 		logger.Info("initializing solana websocket adapter",
 			"endpoint", *wsEndpoint,
@@ -94,14 +86,11 @@ func main() {
 		adpt = solana.New(cfg, logger)
 	}
 
-	// Create event channel
 	events := make(chan adapter.Event, 10000)
 
-	// Setup context with signal handling
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	// Handle shutdown signals
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 
@@ -111,7 +100,6 @@ func main() {
 		cancel()
 	}()
 
-	// Initialize Kafka producer
 	client, err := kgo.NewClient(
 		kgo.SeedBrokers(*brokerEndpoint),
 		kgo.DefaultProduceTopic(*outputTopic),
@@ -122,27 +110,22 @@ func main() {
 	}
 	defer client.Close()
 
-	// Start adapter
 	if err := adpt.Start(ctx, events); err != nil {
 		logger.Error("failed to start adapter", "error", err)
 		os.Exit(1)
 	}
 
-	// Start event consumer
 	go func() {
 		for event := range events {
-			// Convert to Canonical format (mocking processor for MVP)
-			// In production, adapter sends raw events, processor normalizes.
-			// Here we send JSON directly to trigger-router's input topic.
 			canonical := map[string]interface{}{
 				"event_id":         fmt.Sprintf("sol-%d-%s", event.BlockNumber, event.TxHash),
-				"chain":            1, // SOLANA
-				"commitment_level": 2, // CONFIRMED
+				"chain":            1,
+				"commitment_level": 2,
 				"block_number":     event.BlockNumber,
 				"tx_hash":          event.TxHash,
 				"event_type":       event.EventType,
 				"timestamp":        time.Unix(event.Timestamp, 0).Format(time.RFC3339),
-				"payload":          event.Payload, // Raw JSON
+				"payload":          event.Payload,
 			}
 
 			data, err := json.Marshal(canonical)
@@ -163,10 +146,8 @@ func main() {
 		}
 	}()
 
-	// Wait for shutdown
 	<-ctx.Done()
 
-	// Graceful shutdown
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 30)
 	defer shutdownCancel()
 
@@ -178,7 +159,6 @@ func main() {
 	logger.Info("solana adapter shutdown complete")
 }
 
-// getEnv returns environment variable value or default.
 func getEnv(key, defaultVal string) string {
 	if val := os.Getenv(key); val != "" {
 		return val

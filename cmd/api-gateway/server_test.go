@@ -78,9 +78,8 @@ func TestServer_ReadyEndpoint(t *testing.T) {
 func TestServer_ReadyEndpoint_WhenHalted(t *testing.T) {
 	server := NewServer(Config{}, slog.Default())
 
-	// Create and configure watermark controller
 	wc := correctness.NewWatermarkController(correctness.DefaultWatermarkConfig(), slog.Default())
-	wc.InitializeChain(1, 100) // Initialize with chain 1
+	wc.InitializeChain(1, 100)
 	wc.Halt(correctness.HaltSourceManualHold, 1, 100, "test halt")
 	server.SetWatermarkController(wc)
 
@@ -172,7 +171,6 @@ func TestServer_HaltsEndpoint_NoController(t *testing.T) {
 
 	server.Router().ServeHTTP(rec, req)
 
-	// handlers.go returns 200 with available:false for no controller
 	if rec.Code != http.StatusOK {
 		t.Errorf("expected status 200, got %d", rec.Code)
 	}

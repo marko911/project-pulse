@@ -1,4 +1,3 @@
-// Package solana_ws implements the Solana blockchain adapter using standard WebSockets.
 package solana_ws
 
 import (
@@ -13,7 +12,6 @@ import (
 	"github.com/marko911/project-pulse/internal/adapter"
 )
 
-// Adapter implements the Solana blockchain adapter using WebSockets.
 type Adapter struct {
 	cfg    Config
 	logger *slog.Logger
@@ -24,15 +22,12 @@ type Adapter struct {
 	conn    *websocket.Conn
 }
 
-// Config holds Solana WebSocket adapter configuration.
 type Config struct {
 	adapter.Config
 
-	// WebSocket endpoint (e.g. wss://api.mainnet-beta.solana.com)
 	Endpoint string
 }
 
-// New creates a new Solana WebSocket adapter.
 func New(cfg Config, logger *slog.Logger) *Adapter {
 	if logger == nil {
 		logger = slog.Default()
@@ -43,7 +38,6 @@ func New(cfg Config, logger *slog.Logger) *Adapter {
 	}
 }
 
-// Start begins streaming events from Solana via WebSockets.
 func (a *Adapter) Start(ctx context.Context, events chan<- adapter.Event) error {
 	a.mu.Lock()
 	if a.running {
@@ -66,7 +60,6 @@ func (a *Adapter) Start(ctx context.Context, events chan<- adapter.Event) error 
 	return nil
 }
 
-// connectionLoop manages the WebSocket connection and reconnection.
 func (a *Adapter) connectionLoop(ctx context.Context, events chan<- adapter.Event) {
 	defer func() {
 		a.mu.Lock()
@@ -115,9 +108,7 @@ func (a *Adapter) connectionLoop(ctx context.Context, events chan<- adapter.Even
 	}
 }
 
-// connectAndStream connects to the WebSocket and streams messages.
 func (a *Adapter) connectAndStream(ctx context.Context, events chan<- adapter.Event) error {
-	// Handle https->wss conversion for usability
 	endpoint := a.cfg.Endpoint
 	if len(endpoint) > 5 && endpoint[:5] == "https" {
 		endpoint = "wss" + endpoint[5:]
@@ -134,19 +125,16 @@ func (a *Adapter) connectAndStream(ctx context.Context, events chan<- adapter.Ev
 	a.conn = conn
 	a.mu.Unlock()
 
-	// Subscribe to slots (blocks)
 	if err := a.subscribeSlot(conn); err != nil {
 		conn.Close()
 		return err
 	}
 
-	// Subscribe to logs (transactions)
 	if err := a.subscribeLogs(conn); err != nil {
 		conn.Close()
 		return err
 	}
 
-	// Read loop
 	for {
 		select {
 		case <-ctx.Done():
@@ -163,7 +151,6 @@ func (a *Adapter) connectAndStream(ctx context.Context, events chan<- adapter.Ev
 	}
 }
 
-// handleMessage parses the incoming JSON message.
 func (a *Adapter) handleMessage(msg []byte, events chan<- adapter.Event) {
 	var base struct {
 		Method string          `json:"method"`
@@ -171,7 +158,7 @@ func (a *Adapter) handleMessage(msg []byte, events chan<- adapter.Event) {
 	}
 
 	if err := json.Unmarshal(msg, &base); err != nil {
-		return // Ignore malformed messages
+		return
 	}
 
 	if base.Method == "slotNotification" {
@@ -193,8 +180,6 @@ func (a *Adapter) handleSlotNotification(params json.RawMessage, events chan<- a
 		return
 	}
 
-	// We don't emit raw slot events to the broker in this MVP, 
-	// but we could use them for watermark tracking.
 	a.logger.Debug("slot update", "slot", p.Result.Slot)
 }
 
@@ -216,15 +201,14 @@ func (a *Adapter) handleLogsNotification(params json.RawMessage, events chan<- a
 		return
 	}
 
-	// Emit event
 	events <- adapter.Event{
 		Chain:           "solana",
 		CommitmentLevel: a.cfg.CommitmentLevel,
 		BlockNumber:     p.Result.Context.Slot,
 		TxHash:          p.Result.Value.Signature,
-		EventType:       "transaction", // Simplified type
+		EventType:       "transaction",
 		Timestamp:       time.Now().Unix(),
-		Payload:         params, // Store full JSON payload
+		Payload:         params,
 	}
 }
 
@@ -243,14 +227,13 @@ func (a *Adapter) subscribeLogs(conn *websocket.Conn) error {
 		"id":      2,
 		"method":  "logsSubscribe",
 		"params": []interface{}{
-			"all", // Subscribe to all transactions (Alchemy Devnet supports this)
+			"all",
 			map[string]interface{}{"commitment": a.cfg.CommitmentLevel},
 		},
 	}
 	return conn.WriteJSON(req)
 }
 
-// Stop stops the adapter.
 func (a *Adapter) Stop(ctx context.Context) error {
 	a.mu.Lock()
 	cancel := a.cancel
@@ -263,7 +246,6 @@ func (a *Adapter) Stop(ctx context.Context) error {
 	return nil
 }
 
-// Health checks connection status.
 func (a *Adapter) Health(ctx context.Context) error {
 	a.mu.RLock()
 	defer a.mu.RUnlock()

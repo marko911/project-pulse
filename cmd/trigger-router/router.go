@@ -15,7 +15,6 @@ import (
 	protov1 "github.com/marko911/project-pulse/pkg/proto/v1"
 )
 
-// RouterConfig holds configuration for the trigger router.
 type RouterConfig struct {
 	Brokers       string
 	InputTopic    string
@@ -28,7 +27,6 @@ type RouterConfig struct {
 	Workers       int
 }
 
-// Router routes canonical events to function invocations based on triggers.
 type Router struct {
 	cfg      RouterConfig
 	consumer *kgo.Client
@@ -39,15 +37,12 @@ type Router struct {
 	wg sync.WaitGroup
 }
 
-// NewRouter creates a new Router instance.
 func NewRouter(ctx context.Context, cfg RouterConfig) (*Router, error) {
-	// Parse brokers
 	brokerList := strings.Split(cfg.Brokers, ",")
 	for i := range brokerList {
 		brokerList[i] = strings.TrimSpace(brokerList[i])
 	}
 
-	// Create Kafka consumer
 	consumer, err := kgo.NewClient(
 		kgo.SeedBrokers(brokerList...),
 		kgo.ConsumerGroup(cfg.ConsumerGroup),
@@ -59,7 +54,6 @@ func NewRouter(ctx context.Context, cfg RouterConfig) (*Router, error) {
 		return nil, fmt.Errorf("create kafka consumer: %w", err)
 	}
 
-	// Create Kafka producer
 	producer, err := kgo.NewClient(
 		kgo.SeedBrokers(brokerList...),
 		kgo.MaxProduceRequestsInflightPerBroker(1),
@@ -72,14 +66,12 @@ func NewRouter(ctx context.Context, cfg RouterConfig) (*Router, error) {
 		return nil, fmt.Errorf("create kafka producer: %w", err)
 	}
 
-	// Create Redis client
 	redisClient := redis.NewClient(&redis.Options{
 		Addr:     cfg.RedisAddr,
 		Password: cfg.RedisPassword,
 		DB:       cfg.RedisDB,
 	})
 
-	// Verify Redis connection
 	if err := redisClient.Ping(ctx).Err(); err != nil {
 		consumer.Close()
 		producer.Close()
@@ -97,7 +89,6 @@ func NewRouter(ctx context.Context, cfg RouterConfig) (*Router, error) {
 	}, nil
 }
 
-// Run starts the router processing loop.
 func (r *Router) Run(ctx context.Context) error {
 	slog.Info("Starting trigger router",
 		"input_topic", r.cfg.InputTopic,
@@ -105,7 +96,6 @@ func (r *Router) Run(ctx context.Context) error {
 		"workers", r.cfg.Workers,
 	)
 
-	// Start worker pool
 	eventCh := make(chan *kgo.Record, r.cfg.Workers*10)
 
 	for i := 0; i < r.cfg.Workers; i++ {
@@ -113,7 +103,6 @@ func (r *Router) Run(ctx context.Context) error {
 		go r.worker(ctx, i, eventCh)
 	}
 
-	// Consume events
 	for {
 		select {
 		case <-ctx.Done():
@@ -141,14 +130,12 @@ func (r *Router) Run(ctx context.Context) error {
 			}
 		})
 
-		// Commit offsets periodically
 		if err := r.consumer.CommitUncommittedOffsets(ctx); err != nil {
 			slog.Error("Commit error", "error", err)
 		}
 	}
 }
 
-// worker processes events and routes them to function invocations.
 func (r *Router) worker(ctx context.Context, id int, eventCh <-chan *kgo.Record) {
 	defer r.wg.Done()
 
@@ -167,15 +154,12 @@ func (r *Router) worker(ctx context.Context, id int, eventCh <-chan *kgo.Record)
 	slog.Debug("Worker stopped", "worker_id", id)
 }
 
-// processEvent matches an event against triggers and enqueues invocations.
 func (r *Router) processEvent(ctx context.Context, record *kgo.Record) error {
-	// Deserialize the canonical event
 	var event protov1.CanonicalEvent
 	if err := json.Unmarshal(record.Value, &event); err != nil {
 		return fmt.Errorf("unmarshal event: %w", err)
 	}
 
-	// Find matching triggers
 	triggers, err := r.triggers.Match(ctx, &event)
 	if err != nil {
 		return fmt.Errorf("match triggers: %w", err)
@@ -194,7 +178,6 @@ func (r *Router) processEvent(ctx context.Context, record *kgo.Record) error {
 		"trigger_count", len(triggers),
 	)
 
-	// Create invocations for each matching trigger
 	for _, trigger := range triggers {
 		invocation := &FunctionInvocation{
 			InvocationID: generateInvocationID(),
@@ -225,7 +208,6 @@ func (r *Router) processEvent(ctx context.Context, record *kgo.Record) error {
 	return nil
 }
 
-// enqueueInvocation publishes an invocation to the function-invocations topic.
 func (r *Router) enqueueInvocation(ctx context.Context, inv *FunctionInvocation) error {
 	data, err := json.Marshal(inv)
 	if err != nil {
@@ -234,7 +216,7 @@ func (r *Router) enqueueInvocation(ctx context.Context, inv *FunctionInvocation)
 
 	record := &kgo.Record{
 		Topic: r.cfg.OutputTopic,
-		Key:   []byte(inv.FunctionID), // Partition by function for ordering
+		Key:   []byte(inv.FunctionID),
 		Value: data,
 		Headers: []kgo.RecordHeader{
 			{Key: "invocation_id", Value: []byte(inv.InvocationID)},
@@ -251,16 +233,13 @@ func (r *Router) enqueueInvocation(ctx context.Context, inv *FunctionInvocation)
 	return nil
 }
 
-// shutdown gracefully shuts down the router.
 func (r *Router) shutdown() error {
 	slog.Info("Shutting down router")
 
-	// Final commit
 	if err := r.consumer.CommitUncommittedOffsets(context.Background()); err != nil {
 		slog.Error("Final commit error", "error", err)
 	}
 
-	// Flush producer
 	if err := r.producer.Flush(context.Background()); err != nil {
 		slog.Error("Producer flush error", "error", err)
 	}
@@ -272,7 +251,6 @@ func (r *Router) shutdown() error {
 	return nil
 }
 
-// generateInvocationID creates a unique invocation ID.
 func generateInvocationID() string {
 	return fmt.Sprintf("inv_%d_%d", time.Now().UnixNano(), time.Now().Nanosecond()%1000)
 }

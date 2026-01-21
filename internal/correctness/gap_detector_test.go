@@ -16,7 +16,6 @@ func TestGapDetector_SequentialBlocks(t *testing.T) {
 
 	ctx := context.Background()
 
-	// Process sequential blocks
 	for i := uint64(100); i <= 105; i++ {
 		event := &protov1.CanonicalEvent{
 			Chain:           protov1.Chain_CHAIN_ETHEREUM,
@@ -34,7 +33,6 @@ func TestGapDetector_SequentialBlocks(t *testing.T) {
 		}
 	}
 
-	// Verify state
 	state := detector.GetChainState("ethereum", protov1.CommitmentLevel_COMMITMENT_LEVEL_FINALIZED)
 	if state == nil {
 		t.Fatal("expected chain state to exist")
@@ -49,12 +47,11 @@ func TestGapDetector_SequentialBlocks(t *testing.T) {
 
 func TestGapDetector_GapDetection(t *testing.T) {
 	detector := NewGapDetector(GapDetectorConfig{
-		FailClosed: false, // Don't halt for this test
+		FailClosed: false,
 	}, nil)
 
 	ctx := context.Background()
 
-	// Process block 100
 	event1 := &protov1.CanonicalEvent{
 		Chain:           protov1.Chain_CHAIN_ETHEREUM,
 		CommitmentLevel: protov1.CommitmentLevel_COMMITMENT_LEVEL_FINALIZED,
@@ -63,7 +60,6 @@ func TestGapDetector_GapDetection(t *testing.T) {
 	}
 	_, _ = detector.ProcessEvent(ctx, event1)
 
-	// Process block 105 (skipping 101-104)
 	event2 := &protov1.CanonicalEvent{
 		Chain:           protov1.Chain_CHAIN_ETHEREUM,
 		CommitmentLevel: protov1.CommitmentLevel_COMMITMENT_LEVEL_FINALIZED,
@@ -79,7 +75,6 @@ func TestGapDetector_GapDetection(t *testing.T) {
 		t.Fatal("expected gap event to be returned")
 	}
 
-	// Verify gap event details
 	if gapEvent.ExpectedBlock != 101 {
 		t.Errorf("expected block 101, got %d", gapEvent.ExpectedBlock)
 	}
@@ -93,7 +88,6 @@ func TestGapDetector_GapDetection(t *testing.T) {
 		t.Errorf("missing blocks count should be 4, got %d", len(gapEvent.MissingBlocks))
 	}
 
-	// Verify missing blocks are correct
 	expectedMissing := []uint64{101, 102, 103, 104}
 	for i, block := range gapEvent.MissingBlocks {
 		if block != expectedMissing[i] {
@@ -109,7 +103,6 @@ func TestGapDetector_FailClosed(t *testing.T) {
 
 	ctx := context.Background()
 
-	// Process block 100
 	event1 := &protov1.CanonicalEvent{
 		Chain:           protov1.Chain_CHAIN_ETHEREUM,
 		CommitmentLevel: protov1.CommitmentLevel_COMMITMENT_LEVEL_FINALIZED,
@@ -118,7 +111,6 @@ func TestGapDetector_FailClosed(t *testing.T) {
 	}
 	_, _ = detector.ProcessEvent(ctx, event1)
 
-	// Process block 105 (gap)
 	event2 := &protov1.CanonicalEvent{
 		Chain:           protov1.Chain_CHAIN_ETHEREUM,
 		CommitmentLevel: protov1.CommitmentLevel_COMMITMENT_LEVEL_FINALIZED,
@@ -134,7 +126,6 @@ func TestGapDetector_FailClosed(t *testing.T) {
 		t.Fatal("expected gap event even with error")
 	}
 
-	// Verify halted state
 	if !detector.IsHalted() {
 		t.Error("detector should be halted")
 	}
@@ -142,7 +133,6 @@ func TestGapDetector_FailClosed(t *testing.T) {
 		t.Error("halt reason should be set")
 	}
 
-	// Further processing should fail
 	event3 := &protov1.CanonicalEvent{
 		Chain:           protov1.Chain_CHAIN_ETHEREUM,
 		CommitmentLevel: protov1.CommitmentLevel_COMMITMENT_LEVEL_FINALIZED,
@@ -162,7 +152,6 @@ func TestGapDetector_MultiChain(t *testing.T) {
 
 	ctx := context.Background()
 
-	// Process Ethereum blocks
 	for i := uint64(100); i <= 103; i++ {
 		event := &protov1.CanonicalEvent{
 			Chain:           protov1.Chain_CHAIN_ETHEREUM,
@@ -173,7 +162,6 @@ func TestGapDetector_MultiChain(t *testing.T) {
 		_, _ = detector.ProcessEvent(ctx, event)
 	}
 
-	// Process Solana slots
 	for i := uint64(200); i <= 203; i++ {
 		event := &protov1.CanonicalEvent{
 			Chain:           protov1.Chain_CHAIN_SOLANA,
@@ -184,7 +172,6 @@ func TestGapDetector_MultiChain(t *testing.T) {
 		_, _ = detector.ProcessEvent(ctx, event)
 	}
 
-	// Verify both chains tracked independently
 	ethState := detector.GetChainState("ethereum", protov1.CommitmentLevel_COMMITMENT_LEVEL_FINALIZED)
 	if ethState == nil || ethState.LastSeenBlock != 103 {
 		t.Errorf("ethereum last block should be 103")
@@ -203,7 +190,6 @@ func TestGapDetector_SkipsNonFinalized(t *testing.T) {
 
 	ctx := context.Background()
 
-	// Process confirmed (non-finalized) events - should be skipped
 	for i := uint64(100); i <= 105; i++ {
 		event := &protov1.CanonicalEvent{
 			Chain:           protov1.Chain_CHAIN_ETHEREUM,
@@ -221,7 +207,6 @@ func TestGapDetector_SkipsNonFinalized(t *testing.T) {
 		}
 	}
 
-	// No state should be tracked for confirmed level
 	state := detector.GetChainState("ethereum", protov1.CommitmentLevel_COMMITMENT_LEVEL_CONFIRMED)
 	if state != nil {
 		t.Error("should not track non-finalized events")
@@ -235,7 +220,6 @@ func TestGapDetector_SkipsReorgEvents(t *testing.T) {
 
 	ctx := context.Background()
 
-	// First block
 	event1 := &protov1.CanonicalEvent{
 		Chain:           protov1.Chain_CHAIN_ETHEREUM,
 		CommitmentLevel: protov1.CommitmentLevel_COMMITMENT_LEVEL_FINALIZED,
@@ -244,7 +228,6 @@ func TestGapDetector_SkipsReorgEvents(t *testing.T) {
 	}
 	_, _ = detector.ProcessEvent(ctx, event1)
 
-	// Retraction event for block 101 (should be skipped)
 	retract := &protov1.CanonicalEvent{
 		Chain:           protov1.Chain_CHAIN_ETHEREUM,
 		CommitmentLevel: protov1.CommitmentLevel_COMMITMENT_LEVEL_FINALIZED,
@@ -259,7 +242,6 @@ func TestGapDetector_SkipsReorgEvents(t *testing.T) {
 		t.Error("reorg events should not cause gap detection")
 	}
 
-	// Block 102 should still be fine (101 was skipped due to retraction)
 	event2 := &protov1.CanonicalEvent{
 		Chain:           protov1.Chain_CHAIN_ETHEREUM,
 		CommitmentLevel: protov1.CommitmentLevel_COMMITMENT_LEVEL_FINALIZED,
@@ -285,7 +267,6 @@ func TestGapDetector_Callback(t *testing.T) {
 
 	ctx := context.Background()
 
-	// Block 100
 	event1 := &protov1.CanonicalEvent{
 		Chain:           protov1.Chain_CHAIN_ETHEREUM,
 		CommitmentLevel: protov1.CommitmentLevel_COMMITMENT_LEVEL_FINALIZED,
@@ -293,7 +274,6 @@ func TestGapDetector_Callback(t *testing.T) {
 	}
 	_, _ = detector.ProcessEvent(ctx, event1)
 
-	// Block 103 (gap of 2)
 	event2 := &protov1.CanonicalEvent{
 		Chain:           protov1.Chain_CHAIN_ETHEREUM,
 		CommitmentLevel: protov1.CommitmentLevel_COMMITMENT_LEVEL_FINALIZED,
@@ -319,7 +299,6 @@ func TestGapDetector_ResolveGap(t *testing.T) {
 
 	ctx := context.Background()
 
-	// Block 100
 	event1 := &protov1.CanonicalEvent{
 		Chain:           protov1.Chain_CHAIN_ETHEREUM,
 		CommitmentLevel: protov1.CommitmentLevel_COMMITMENT_LEVEL_FINALIZED,
@@ -327,7 +306,6 @@ func TestGapDetector_ResolveGap(t *testing.T) {
 	}
 	_, _ = detector.ProcessEvent(ctx, event1)
 
-	// Block 105 (gap) - causes halt
 	event2 := &protov1.CanonicalEvent{
 		Chain:           protov1.Chain_CHAIN_ETHEREUM,
 		CommitmentLevel: protov1.CommitmentLevel_COMMITMENT_LEVEL_FINALIZED,
@@ -339,7 +317,6 @@ func TestGapDetector_ResolveGap(t *testing.T) {
 		t.Fatal("detector should be halted")
 	}
 
-	// Resolve the gap
 	err := detector.ResolveGap("ethereum", protov1.CommitmentLevel_COMMITMENT_LEVEL_FINALIZED, 105)
 	if err != nil {
 		t.Fatalf("resolve gap error: %v", err)
@@ -349,7 +326,6 @@ func TestGapDetector_ResolveGap(t *testing.T) {
 		t.Error("detector should resume after gap resolution")
 	}
 
-	// Should be able to process new blocks now
 	event3 := &protov1.CanonicalEvent{
 		Chain:           protov1.Chain_CHAIN_ETHEREUM,
 		CommitmentLevel: protov1.CommitmentLevel_COMMITMENT_LEVEL_FINALIZED,
@@ -368,7 +344,6 @@ func TestGapDetector_DuplicateBlocks(t *testing.T) {
 
 	ctx := context.Background()
 
-	// Process blocks 100, 101, 102
 	for i := uint64(100); i <= 102; i++ {
 		event := &protov1.CanonicalEvent{
 			Chain:           protov1.Chain_CHAIN_ETHEREUM,
@@ -378,7 +353,6 @@ func TestGapDetector_DuplicateBlocks(t *testing.T) {
 		_, _ = detector.ProcessEvent(ctx, event)
 	}
 
-	// Re-send block 101 (duplicate)
 	duplicate := &protov1.CanonicalEvent{
 		Chain:           protov1.Chain_CHAIN_ETHEREUM,
 		CommitmentLevel: protov1.CommitmentLevel_COMMITMENT_LEVEL_FINALIZED,
@@ -392,7 +366,6 @@ func TestGapDetector_DuplicateBlocks(t *testing.T) {
 		t.Error("duplicate blocks should not cause gap detection")
 	}
 
-	// State should still show block 102 as last seen
 	state := detector.GetChainState("ethereum", protov1.CommitmentLevel_COMMITMENT_LEVEL_FINALIZED)
 	if state.LastSeenBlock != 102 {
 		t.Errorf("last seen should still be 102, got %d", state.LastSeenBlock)
@@ -406,7 +379,6 @@ func TestGapDetector_Stats(t *testing.T) {
 
 	ctx := context.Background()
 
-	// Process some blocks
 	for i := uint64(100); i <= 105; i++ {
 		event := &protov1.CanonicalEvent{
 			Chain:           protov1.Chain_CHAIN_ETHEREUM,

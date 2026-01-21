@@ -1,4 +1,3 @@
-// Package consumer provides NATS JetStream consumer for real-time event fanout.
 package consumer
 
 import (
@@ -15,22 +14,19 @@ import (
 	protov1 "github.com/marko911/project-pulse/pkg/proto/v1"
 )
 
-// Router defines the interface for routing events to WebSocket clients.
 type Router interface {
 	Route(event *protov1.CanonicalEvent) error
 	RouteBatch(ctx context.Context, events []*protov1.CanonicalEvent) error
 }
 
-// NATSConsumerConfig holds configuration for the NATS consumer.
 type NATSConsumerConfig struct {
-	NATSURL      string        // NATS server URL
-	StreamName   string        // JetStream stream name
-	ConsumerName string        // Durable consumer name
-	BatchSize    int           // Messages to fetch per batch
-	FetchTimeout time.Duration // Timeout for batch fetch
+	NATSURL      string
+	StreamName   string
+	ConsumerName string
+	BatchSize    int
+	FetchTimeout time.Duration
 }
 
-// DefaultNATSConsumerConfig returns sensible defaults.
 func DefaultNATSConsumerConfig() NATSConsumerConfig {
 	return NATSConsumerConfig{
 		NATSURL:      "nats://localhost:4222",
@@ -41,7 +37,6 @@ func DefaultNATSConsumerConfig() NATSConsumerConfig {
 	}
 }
 
-// NATSConsumer reads events from NATS JetStream and routes them to WebSocket clients.
 type NATSConsumer struct {
 	cfg      NATSConsumerConfig
 	client   *pnats.Client
@@ -54,13 +49,11 @@ type NATSConsumer struct {
 	done    chan struct{}
 }
 
-// NewNATSConsumer creates a new NATS JetStream consumer.
 func NewNATSConsumer(ctx context.Context, cfg NATSConsumerConfig, router Router, logger *slog.Logger) (*NATSConsumer, error) {
 	if logger == nil {
 		logger = slog.Default()
 	}
 
-	// Connect to NATS
 	natsCfg := pnats.DefaultConfig()
 	natsCfg.URL = cfg.NATSURL
 	natsCfg.Name = cfg.ConsumerName
@@ -70,7 +63,6 @@ func NewNATSConsumer(ctx context.Context, cfg NATSConsumerConfig, router Router,
 		return nil, fmt.Errorf("nats connect: %w", err)
 	}
 
-	// Ensure stream exists
 	streamCfg := pnats.DefaultCanonicalEventsStreamConfig()
 	if cfg.StreamName != "" {
 		streamCfg.Name = cfg.StreamName
@@ -82,7 +74,6 @@ func NewNATSConsumer(ctx context.Context, cfg NATSConsumerConfig, router Router,
 		return nil, fmt.Errorf("ensure stream: %w", err)
 	}
 
-	// Create durable consumer
 	consumerCfg := pnats.DefaultFanoutConsumerConfig(cfg.ConsumerName)
 	consumer, err := pnats.EnsureConsumer(ctx, stream, consumerCfg)
 	if err != nil {
@@ -106,7 +97,6 @@ func NewNATSConsumer(ctx context.Context, cfg NATSConsumerConfig, router Router,
 	}, nil
 }
 
-// Start begins consuming events from NATS and routing them.
 func (nc *NATSConsumer) Start(ctx context.Context) error {
 	nc.mu.Lock()
 	if nc.running {
@@ -132,7 +122,6 @@ func (nc *NATSConsumer) Start(ctx context.Context) error {
 		default:
 			if err := nc.fetchAndRoute(ctx); err != nil {
 				nc.logger.Error("Fetch and route error", "error", err)
-				// Brief backoff on error
 				select {
 				case <-ctx.Done():
 					return nil
@@ -143,12 +132,9 @@ func (nc *NATSConsumer) Start(ctx context.Context) error {
 	}
 }
 
-// fetchAndRoute fetches a batch of messages and routes them to WebSocket clients.
 func (nc *NATSConsumer) fetchAndRoute(ctx context.Context) error {
-	// Fetch batch of messages
 	msgs, err := nc.consumer.Fetch(nc.cfg.BatchSize, jetstream.FetchMaxWait(nc.cfg.FetchTimeout))
 	if err != nil {
-		// Timeout is normal when no messages available
 		if err == context.DeadlineExceeded {
 			return nil
 		}
@@ -165,7 +151,6 @@ func (nc *NATSConsumer) fetchAndRoute(ctx context.Context) error {
 				"subject", msg.Subject(),
 				"error", err,
 			)
-			// Nak to retry later
 			msg.Nak()
 			continue
 		}
@@ -182,17 +167,14 @@ func (nc *NATSConsumer) fetchAndRoute(ctx context.Context) error {
 		return nil
 	}
 
-	// Route batch to WebSocket clients
 	if err := nc.router.RouteBatch(ctx, events); err != nil {
 		nc.logger.Error("Route batch failed", "count", len(events), "error", err)
-		// Nak all messages for retry
 		for _, msg := range msgRefs {
 			msg.Nak()
 		}
 		return err
 	}
 
-	// Ack all successfully routed messages
 	for _, msg := range msgRefs {
 		if err := msg.Ack(); err != nil {
 			nc.logger.Warn("Failed to ack message", "error", err)
@@ -203,7 +185,6 @@ func (nc *NATSConsumer) fetchAndRoute(ctx context.Context) error {
 	return nil
 }
 
-// deserializeEvent converts JSON message data to CanonicalEvent.
 func (nc *NATSConsumer) deserializeEvent(data []byte) (*protov1.CanonicalEvent, error) {
 	var event protov1.CanonicalEvent
 	if err := json.Unmarshal(data, &event); err != nil {
@@ -212,7 +193,6 @@ func (nc *NATSConsumer) deserializeEvent(data []byte) (*protov1.CanonicalEvent, 
 	return &event, nil
 }
 
-// Stop gracefully stops the consumer.
 func (nc *NATSConsumer) Stop() error {
 	nc.mu.Lock()
 	defer nc.mu.Unlock()
@@ -231,7 +211,6 @@ func (nc *NATSConsumer) Stop() error {
 	return nil
 }
 
-// IsRunning returns true if the consumer is actively running.
 func (nc *NATSConsumer) IsRunning() bool {
 	nc.mu.Lock()
 	defer nc.mu.Unlock()

@@ -13,39 +13,34 @@ import (
 	protov1 "github.com/marko911/project-pulse/pkg/proto/v1"
 )
 
-// NATSConsumer subscribes to NATS JetStream and routes events to WebSocket clients.
 type NATSConsumer struct {
 	client   *pnats.Client
 	stream   jetstream.Stream
 	consumer jetstream.Consumer
 	logger   *slog.Logger
 
-	// Callback for routing events
 	onEvent func(*protov1.CanonicalEvent) error
 
-	// Worker pool configuration
 	workers int
 	jobCh   chan jetstream.Msg
 	wg      sync.WaitGroup
 	done    chan struct{}
 }
 
-// NATSConsumerConfig holds configuration for the NATS consumer.
 type NATSConsumerConfig struct {
 	URL          string
 	ConsumerName string
-	Workers      int // Number of concurrent message processing workers (default: 4)
+	Workers      int
 	Logger       *slog.Logger
 	OnEvent      func(*protov1.CanonicalEvent) error
 }
 
-// NewNATSConsumer creates a new NATS JetStream consumer for event fanout.
 func NewNATSConsumer(ctx context.Context, cfg NATSConsumerConfig) (*NATSConsumer, error) {
 	if cfg.Logger == nil {
 		cfg.Logger = slog.Default()
 	}
 	if cfg.Workers <= 0 {
-		cfg.Workers = 4 // Default to 4 workers
+		cfg.Workers = 4
 	}
 
 	natsCfg := pnats.DefaultConfig()
@@ -57,7 +52,6 @@ func NewNATSConsumer(ctx context.Context, cfg NATSConsumerConfig) (*NATSConsumer
 		return nil, err
 	}
 
-	// Ensure the stream exists
 	streamCfg := pnats.DefaultCanonicalEventsStreamConfig()
 	stream, err := pnats.EnsureStream(ctx, client.JetStream(), streamCfg)
 	if err != nil {
@@ -65,7 +59,6 @@ func NewNATSConsumer(ctx context.Context, cfg NATSConsumerConfig) (*NATSConsumer
 		return nil, err
 	}
 
-	// Create consumer for this gateway instance
 	consumerCfg := pnats.DefaultFanoutConsumerConfig(cfg.ConsumerName)
 	consumer, err := pnats.EnsureConsumer(ctx, stream, consumerCfg)
 	if err != nil {
@@ -87,28 +80,24 @@ func NewNATSConsumer(ctx context.Context, cfg NATSConsumerConfig) (*NATSConsumer
 		logger:   cfg.Logger,
 		onEvent:  cfg.OnEvent,
 		workers:  cfg.Workers,
-		jobCh:    make(chan jetstream.Msg, cfg.Workers*10), // Buffered job queue
+		jobCh:    make(chan jetstream.Msg, cfg.Workers*10),
 		done:     make(chan struct{}),
 	}, nil
 }
 
-// Start begins consuming events from NATS JetStream.
 func (c *NATSConsumer) Start(ctx context.Context) error {
 	c.logger.Info("starting NATS event consumption", "workers", c.workers)
 
-	// Create a message iterator for the consumer
 	msgIter, err := c.consumer.Messages()
 	if err != nil {
 		return err
 	}
 
-	// Start worker pool for concurrent message processing
 	for i := 0; i < c.workers; i++ {
 		c.wg.Add(1)
 		go c.worker(ctx, i)
 	}
 
-	// Stop iterator on context cancellation or done signal
 	go func() {
 		select {
 		case <-ctx.Done():
@@ -117,7 +106,6 @@ func (c *NATSConsumer) Start(ctx context.Context) error {
 		msgIter.Stop()
 	}()
 
-	// Dispatcher: fetch messages and distribute to workers
 	go func() {
 		for {
 			select {
@@ -129,14 +117,13 @@ func (c *NATSConsumer) Start(ctx context.Context) error {
 				msg, err := msgIter.Next()
 				if err != nil {
 					if ctx.Err() != nil {
-						return // Context cancelled
+						return
 					}
 					c.logger.Error("error fetching message", "error", err)
 					time.Sleep(100 * time.Millisecond)
 					continue
 				}
 
-				// Dispatch to worker pool
 				select {
 				case c.jobCh <- msg:
 				case <-ctx.Done():
@@ -151,7 +138,6 @@ func (c *NATSConsumer) Start(ctx context.Context) error {
 	return nil
 }
 
-// worker processes messages from the job channel.
 func (c *NATSConsumer) worker(ctx context.Context, id int) {
 	defer c.wg.Done()
 
@@ -172,7 +158,7 @@ func (c *NATSConsumer) worker(ctx context.Context, id int) {
 					"subject", msg.Subject(),
 					"error", err,
 				)
-				msg.Nak() // Negative acknowledgment for redelivery
+				msg.Nak()
 			} else {
 				msg.Ack()
 			}
@@ -180,16 +166,13 @@ func (c *NATSConsumer) worker(ctx context.Context, id int) {
 	}
 }
 
-// handleMessage processes a single NATS message.
 func (c *NATSConsumer) handleMessage(ctx context.Context, msg jetstream.Msg) error {
-	// Deserialize the event from the message
 	var event NATSEvent
 	if err := json.Unmarshal(msg.Data(), &event); err != nil {
 		c.logger.Error("failed to unmarshal event", "error", err)
-		return nil // Don't retry malformed messages
+		return nil
 	}
 
-	// Convert to CanonicalEvent
 	canonicalEvent := &protov1.CanonicalEvent{
 		EventId:         event.EventID,
 		Chain:           event.Chain,
@@ -204,7 +187,6 @@ func (c *NATSConsumer) handleMessage(ctx context.Context, msg jetstream.Msg) err
 		ReorgAction:     event.ReorgAction,
 	}
 
-	// Route the event
 	if c.onEvent != nil {
 		return c.onEvent(canonicalEvent)
 	}
@@ -212,19 +194,13 @@ func (c *NATSConsumer) handleMessage(ctx context.Context, msg jetstream.Msg) err
 	return nil
 }
 
-// Close shuts down the NATS consumer gracefully.
 func (c *NATSConsumer) Close() error {
-	// Signal workers to stop
 	close(c.done)
-	// Wait for workers to finish
 	c.wg.Wait()
-	// Close the job channel
 	close(c.jobCh)
-	// Close NATS connection
 	return c.client.Close()
 }
 
-// NATSEvent represents the event structure published to NATS.
 type NATSEvent struct {
 	EventID         string                   `json:"event_id"`
 	Chain           protov1.Chain            `json:"chain"`

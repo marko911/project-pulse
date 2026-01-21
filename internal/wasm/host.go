@@ -1,4 +1,3 @@
-// Package wasm provides the WASM function execution runtime using wasmtime.
 package wasm
 
 import (
@@ -12,34 +11,27 @@ import (
 	"github.com/twmb/franz-go/pkg/kgo"
 )
 
-// HostConfig contains configuration for the WASM host.
 type HostConfig struct {
-	// Kafka/Redpanda
 	BrokerEndpoint  string
 	InvocationTopic string
 	ResultTopic     string
 	BillingTopic    string
 	ConsumerGroup   string
 
-	// S3/MinIO
 	S3Endpoint  string
 	S3Bucket    string
 	S3AccessKey string
 	S3SecretKey string
 	S3UseSSL    bool
 
-	// Redis
 	RedisAddr string
 
-	// Runtime
 	WorkerCount     int
 	MaxMemoryMB     int
 	MaxCPUMs        int
 	ModuleCacheSize int
 }
 
-// InvocationRequest represents a function invocation request.
-// Matches the FunctionInvocation struct from trigger-router.
 type InvocationRequest struct {
 	InvocationID string                 `json:"invocation_id"`
 	FunctionID   string                 `json:"function_id"`
@@ -49,7 +41,6 @@ type InvocationRequest struct {
 	CreatedAt    string                 `json:"created_at"`
 }
 
-// InvocationResult represents the result of a function execution.
 type InvocationResult struct {
 	RequestID   string `json:"request_id"`
 	FunctionID  string `json:"function_id"`
@@ -61,7 +52,6 @@ type InvocationResult struct {
 	MemoryBytes int64  `json:"memory_bytes"`
 }
 
-// Host manages WASM function execution.
 type Host struct {
 	cfg      HostConfig
 	logger   *slog.Logger
@@ -75,9 +65,7 @@ type Host struct {
 	wg       sync.WaitGroup
 }
 
-// NewHost creates a new WASM host instance.
 func NewHost(cfg HostConfig, logger *slog.Logger) (*Host, error) {
-	// Create runtime with wasmtime engine
 	runtime, err := NewRuntime(RuntimeConfig{
 		MaxMemoryMB: cfg.MaxMemoryMB,
 		MaxCPUMs:    cfg.MaxCPUMs,
@@ -87,7 +75,6 @@ func NewHost(cfg HostConfig, logger *slog.Logger) (*Host, error) {
 		return nil, err
 	}
 
-	// Create module loader for S3/MinIO
 	loader, err := NewModuleLoader(LoaderConfig{
 		Endpoint:  cfg.S3Endpoint,
 		Bucket:    cfg.S3Bucket,
@@ -100,7 +87,6 @@ func NewHost(cfg HostConfig, logger *slog.Logger) (*Host, error) {
 	}
 	loader.SetRuntime(runtime)
 
-	// Create host SDK for WASM functions
 	sdk, err := NewHostSDK(HostSDKConfig{
 		RedisAddr: cfg.RedisAddr,
 	}, logger)
@@ -108,7 +94,6 @@ func NewHost(cfg HostConfig, logger *slog.Logger) (*Host, error) {
 		return nil, err
 	}
 
-	// Create metering publisher for billing events
 	metering, err := NewMeteringPublisher(MeteringConfig{
 		BrokerEndpoint: cfg.BrokerEndpoint,
 		BillingTopic:   cfg.BillingTopic,
@@ -117,7 +102,6 @@ func NewHost(cfg HostConfig, logger *slog.Logger) (*Host, error) {
 		return nil, err
 	}
 
-	// Create Kafka consumer for function-invocations topic
 	brokerList := strings.Split(cfg.BrokerEndpoint, ",")
 	for i := range brokerList {
 		brokerList[i] = strings.TrimSpace(brokerList[i])
@@ -134,7 +118,6 @@ func NewHost(cfg HostConfig, logger *slog.Logger) (*Host, error) {
 		return nil, fmt.Errorf("create kafka consumer: %w", err)
 	}
 
-	// Create Kafka producer for function-results topic
 	producer, err := kgo.NewClient(
 		kgo.SeedBrokers(brokerList...),
 		kgo.MaxProduceRequestsInflightPerBroker(1),
@@ -166,15 +149,12 @@ func NewHost(cfg HostConfig, logger *slog.Logger) (*Host, error) {
 	}, nil
 }
 
-// Run starts the WASM host and blocks until context is cancelled.
 func (h *Host) Run(ctx context.Context) error {
 	h.logger.Info("starting wasm host workers", "count", h.cfg.WorkerCount)
 
-	// Create worker pool
 	invocations := make(chan InvocationRequest, h.cfg.WorkerCount*10)
 	results := make(chan InvocationResult, h.cfg.WorkerCount*10)
 
-	// Start workers
 	for i := 0; i < h.cfg.WorkerCount; i++ {
 		worker := NewWorker(i, h.runtime, h.loader, h.sdk, h.logger)
 		h.workers = append(h.workers, worker)
@@ -186,35 +166,29 @@ func (h *Host) Run(ctx context.Context) error {
 		}(worker)
 	}
 
-	// Start result publisher
 	h.wg.Add(1)
 	go func() {
 		defer h.wg.Done()
 		h.publishResults(ctx, results)
 	}()
 
-	// Start invocation consumer
 	h.wg.Add(1)
 	go func() {
 		defer h.wg.Done()
 		h.consumeInvocations(ctx, invocations)
 	}()
 
-	// Wait for shutdown
 	<-ctx.Done()
 	h.logger.Info("shutting down wasm host")
 
-	// Close channels to signal workers
 	close(invocations)
 
-	// Wait for all workers to finish
 	h.wg.Wait()
 	close(results)
 
 	return nil
 }
 
-// consumeInvocations consumes invocation requests from Kafka.
 func (h *Host) consumeInvocations(ctx context.Context, out chan<- InvocationRequest) {
 	h.logger.Info("starting invocation consumer",
 		"topic", h.cfg.InvocationTopic,
@@ -225,7 +199,6 @@ func (h *Host) consumeInvocations(ctx context.Context, out chan<- InvocationRequ
 		select {
 		case <-ctx.Done():
 			h.logger.Info("invocation consumer shutting down")
-			// Final commit before exit
 			if err := h.consumer.CommitUncommittedOffsets(context.Background()); err != nil {
 				h.logger.Error("final commit error", "error", err)
 			}
@@ -272,19 +245,16 @@ func (h *Host) consumeInvocations(ctx context.Context, out chan<- InvocationRequ
 			}
 		})
 
-		// Commit offsets after processing batch
 		if err := h.consumer.CommitUncommittedOffsets(ctx); err != nil && err != context.Canceled {
 			h.logger.Error("commit error", "error", err)
 		}
 	}
 }
 
-// publishResults publishes execution results to Kafka.
 func (h *Host) publishResults(ctx context.Context, in <-chan InvocationResult) {
 	h.logger.Info("starting result publisher", "topic", h.cfg.ResultTopic)
 
 	defer func() {
-		// Flush and close producer on shutdown
 		if err := h.producer.Flush(context.Background()); err != nil {
 			h.logger.Error("producer flush error", "error", err)
 		}
@@ -298,7 +268,6 @@ func (h *Host) publishResults(ctx context.Context, in <-chan InvocationResult) {
 				return
 			}
 
-			// Publish to Kafka
 			if err := h.publishResult(ctx, &result); err != nil {
 				h.logger.Error("failed to publish result to kafka",
 					"request_id", result.RequestID,
@@ -312,7 +281,6 @@ func (h *Host) publishResults(ctx context.Context, in <-chan InvocationResult) {
 				)
 			}
 
-			// Emit billing event for metering
 			if err := h.metering.Publish(ctx, &result); err != nil {
 				h.logger.Error("failed to publish billing event",
 					"request_id", result.RequestID,
@@ -320,7 +288,6 @@ func (h *Host) publishResults(ctx context.Context, in <-chan InvocationResult) {
 				)
 			}
 		case <-ctx.Done():
-			// Drain remaining results
 			for result := range in {
 				if err := h.publishResult(context.Background(), &result); err != nil {
 					h.logger.Error("failed to publish final result", "request_id", result.RequestID, "error", err)
@@ -331,7 +298,6 @@ func (h *Host) publishResults(ctx context.Context, in <-chan InvocationResult) {
 	}
 }
 
-// publishResult publishes a single result to the function-results Kafka topic.
 func (h *Host) publishResult(ctx context.Context, result *InvocationResult) error {
 	data, err := json.Marshal(result)
 	if err != nil {
@@ -340,7 +306,7 @@ func (h *Host) publishResult(ctx context.Context, result *InvocationResult) erro
 
 	record := &kgo.Record{
 		Topic: h.cfg.ResultTopic,
-		Key:   []byte(result.FunctionID), // Partition by function for ordering
+		Key:   []byte(result.FunctionID),
 		Value: data,
 		Headers: []kgo.RecordHeader{
 			{Key: "request_id", Value: []byte(result.RequestID)},
@@ -358,7 +324,6 @@ func (h *Host) publishResult(ctx context.Context, result *InvocationResult) erro
 	return nil
 }
 
-// Worker executes WASM functions.
 type Worker struct {
 	id      int
 	runtime *Runtime
@@ -367,7 +332,6 @@ type Worker struct {
 	logger  *slog.Logger
 }
 
-// NewWorker creates a new execution worker.
 func NewWorker(id int, runtime *Runtime, loader *ModuleLoader, sdk *HostSDK, logger *slog.Logger) *Worker {
 	return &Worker{
 		id:      id,
@@ -378,7 +342,6 @@ func NewWorker(id int, runtime *Runtime, loader *ModuleLoader, sdk *HostSDK, log
 	}
 }
 
-// Run processes invocation requests until the channel is closed.
 func (w *Worker) Run(ctx context.Context, in <-chan InvocationRequest, out chan<- InvocationResult) {
 	w.logger.Info("worker started")
 
@@ -398,7 +361,6 @@ func (w *Worker) Run(ctx context.Context, in <-chan InvocationRequest, out chan<
 	}
 }
 
-// execute runs a single function invocation.
 func (w *Worker) execute(ctx context.Context, req InvocationRequest) InvocationResult {
 	w.logger.Debug("executing function",
 		"request_id", req.InvocationID,
@@ -406,7 +368,6 @@ func (w *Worker) execute(ctx context.Context, req InvocationRequest) InvocationR
 		"tenant_id", req.TenantID,
 	)
 
-	// Load the WASM module
 	module, err := w.loader.Load(ctx, req.FunctionID)
 	if err != nil {
 		return InvocationResult{
@@ -418,7 +379,6 @@ func (w *Worker) execute(ctx context.Context, req InvocationRequest) InvocationR
 		}
 	}
 
-	// Marshal the event as payload for the WASM function
 	payload, err := json.Marshal(req.Event)
 	if err != nil {
 		return InvocationResult{
@@ -430,7 +390,6 @@ func (w *Worker) execute(ctx context.Context, req InvocationRequest) InvocationR
 		}
 	}
 
-	// Execute the function
 	hostFuncs := w.sdk.GetHostFunctions(ctx, req.TenantID)
 	result, err := w.runtime.Execute(ctx, module, payload, hostFuncs)
 	if err != nil {

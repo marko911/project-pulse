@@ -1,7 +1,3 @@
-// Command fixture-recorder fetches and saves live chain data as JSON fixtures.
-//
-// This tool connects to Solana (via Yellowstone/Geyser gRPC) or EVM chains
-// (via HTTP/WebSocket RPC) to record blockchain data for testing purposes.
 package main
 
 import (
@@ -26,7 +22,6 @@ import (
 	"github.com/gagliardetto/solana-go/rpc"
 )
 
-// Fixture represents the base fixture structure for all recorded data.
 type Fixture struct {
 	Chain       string          `json:"chain"`
 	Type        string          `json:"type"`
@@ -36,7 +31,6 @@ type Fixture struct {
 	Data        json.RawMessage `json:"data"`
 }
 
-// EVMBlockFixture represents a recorded EVM block.
 type EVMBlockFixture struct {
 	Number       uint64            `json:"number"`
 	Hash         string            `json:"hash"`
@@ -49,7 +43,6 @@ type EVMBlockFixture struct {
 	Extra        map[string]string `json:"extra,omitempty"`
 }
 
-// EVMLogFixture represents a recorded EVM log/event.
 type EVMLogFixture struct {
 	Address     string   `json:"address"`
 	Topics      []string `json:"topics"`
@@ -62,7 +55,6 @@ type EVMLogFixture struct {
 	Removed     bool     `json:"removed"`
 }
 
-// EVMTransactionFixture represents a recorded EVM transaction.
 type EVMTransactionFixture struct {
 	Hash        string `json:"hash"`
 	Nonce       uint64 `json:"nonce"`
@@ -77,7 +69,6 @@ type EVMTransactionFixture struct {
 	Input       string `json:"input"`
 }
 
-// SolanaBlockFixture represents a recorded Solana block/slot.
 type SolanaBlockFixture struct {
 	Slot              uint64   `json:"slot"`
 	Blockhash         string   `json:"blockhash"`
@@ -88,7 +79,6 @@ type SolanaBlockFixture struct {
 	Transactions      []string `json:"transactions"`
 }
 
-// SolanaTransactionFixture represents a recorded Solana transaction.
 type SolanaTransactionFixture struct {
 	Signature   string   `json:"signature"`
 	Slot        uint64   `json:"slot"`
@@ -100,7 +90,6 @@ type SolanaTransactionFixture struct {
 	LogMessages []string `json:"log_messages,omitempty"`
 }
 
-// SolanaAccountFixture represents a recorded Solana account.
 type SolanaAccountFixture struct {
 	Pubkey     string `json:"pubkey"`
 	Lamports   uint64 `json:"lamports"`
@@ -111,7 +100,6 @@ type SolanaAccountFixture struct {
 	Data       string `json:"data,omitempty"`
 }
 
-// Config holds the fixture recorder configuration.
 type Config struct {
 	Chain        string
 	Endpoint     string
@@ -125,7 +113,6 @@ type Config struct {
 }
 
 func main() {
-	// Parse flags
 	chain := flag.String("chain", "evm", "Chain type: evm, solana")
 	endpoint := flag.String("endpoint", "", "RPC endpoint URL")
 	outputDir := flag.String("output", "./fixtures", "Output directory for fixtures")
@@ -138,7 +125,6 @@ func main() {
 	logLevel := flag.String("log-level", "info", "Log level: debug, info, warn, error")
 	flag.Parse()
 
-	// Setup logging
 	level := parseLogLevel(*logLevel)
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: level}))
 	slog.SetDefault(logger)
@@ -161,13 +147,11 @@ func main() {
 		ToBlock:      *toBlock,
 	}
 
-	// Create output directory
 	if err := os.MkdirAll(cfg.OutputDir, 0755); err != nil {
 		logger.Error("failed to create output directory", "error", err)
 		os.Exit(1)
 	}
 
-	// Setup context with signal handling
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -204,7 +188,6 @@ func main() {
 	logger.Info("fixture recording complete")
 }
 
-// recordEVM records fixtures from an EVM chain.
 func recordEVM(ctx context.Context, cfg Config, logger *slog.Logger) error {
 	client, err := ethclient.DialContext(ctx, cfg.Endpoint)
 	if err != nil {
@@ -230,9 +213,7 @@ func recordEVM(ctx context.Context, cfg Config, logger *slog.Logger) error {
 	}
 }
 
-// recordEVMBlocks fetches and saves EVM blocks as fixtures.
 func recordEVMBlocks(ctx context.Context, client *ethclient.Client, cfg Config, logger *slog.Logger) error {
-	// Determine block range
 	latestBlock, err := client.BlockNumber(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to get latest block: %w", err)
@@ -263,7 +244,6 @@ func recordEVMBlocks(ctx context.Context, client *ethclient.Client, cfg Config, 
 			continue
 		}
 
-		// Convert to fixture format
 		txHashes := make([]string, len(block.Transactions()))
 		for j, tx := range block.Transactions() {
 			txHashes[j] = tx.Hash().Hex()
@@ -308,7 +288,6 @@ func recordEVMBlocks(ctx context.Context, client *ethclient.Client, cfg Config, 
 	return nil
 }
 
-// recordEVMLogs fetches and saves EVM logs as fixtures.
 func recordEVMLogs(ctx context.Context, client *ethclient.Client, cfg Config, logger *slog.Logger) error {
 	latestBlock, err := client.BlockNumber(ctx)
 	if err != nil {
@@ -347,7 +326,6 @@ func recordEVMLogs(ctx context.Context, client *ethclient.Client, cfg Config, lo
 
 	logger.Info("found logs", "count", len(logs))
 
-	// Group logs by block
 	logsByBlock := make(map[uint64][]EVMLogFixture)
 	for _, log := range logs {
 		topics := make([]string, len(log.Topics))
@@ -370,7 +348,6 @@ func recordEVMLogs(ctx context.Context, client *ethclient.Client, cfg Config, lo
 		logsByBlock[log.BlockNumber] = append(logsByBlock[log.BlockNumber], logFixture)
 	}
 
-	// Save fixtures per block
 	for blockNum, blockLogs := range logsByBlock {
 		select {
 		case <-ctx.Done():
@@ -402,7 +379,6 @@ func recordEVMLogs(ctx context.Context, client *ethclient.Client, cfg Config, lo
 	return nil
 }
 
-// recordEVMTransactions fetches and saves EVM transactions from blocks.
 func recordEVMTransactions(ctx context.Context, client *ethclient.Client, cfg Config, logger *slog.Logger) error {
 	latestBlock, err := client.BlockNumber(ctx)
 	if err != nil {
@@ -438,11 +414,10 @@ func recordEVMTransactions(ctx context.Context, client *ethclient.Client, cfg Co
 		signer := types.LatestSignerForChainID(chainID)
 
 		for j, tx := range block.Transactions() {
-			// Get sender using signer
 			from, err := types.Sender(signer, tx)
 			if err != nil {
 				logger.Warn("failed to get tx sender", "tx", tx.Hash().Hex(), "error", err)
-				from = common.Address{} // Use zero address as fallback
+				from = common.Address{}
 			}
 
 			txFixture := EVMTransactionFixture{
@@ -498,11 +473,9 @@ func recordEVMTransactions(ctx context.Context, client *ethclient.Client, cfg Co
 	return nil
 }
 
-// recordSolana records fixtures from Solana via JSON-RPC.
 func recordSolana(ctx context.Context, cfg Config, logger *slog.Logger) error {
 	client := rpc.New(cfg.Endpoint)
 
-	// Get cluster version to verify connection
 	version, err := client.GetVersion(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to connect to Solana RPC: %w", err)
@@ -521,9 +494,7 @@ func recordSolana(ctx context.Context, cfg Config, logger *slog.Logger) error {
 	}
 }
 
-// recordSolanaBlocks fetches and saves Solana blocks as fixtures.
 func recordSolanaBlocks(ctx context.Context, client *rpc.Client, cfg Config, logger *slog.Logger) error {
-	// Get current slot
 	slot, err := client.GetSlot(ctx, rpc.CommitmentFinalized)
 	if err != nil {
 		return fmt.Errorf("failed to get current slot: %w", err)
@@ -565,7 +536,6 @@ func recordSolanaBlocks(ctx context.Context, client *rpc.Client, cfg Config, log
 			continue
 		}
 
-		// Extract transaction signatures
 		txSigs := make([]string, 0, len(block.Transactions))
 		for _, tx := range block.Transactions {
 			if tx.Transaction != nil {
@@ -618,9 +588,7 @@ func recordSolanaBlocks(ctx context.Context, client *rpc.Client, cfg Config, log
 	return nil
 }
 
-// recordSolanaTransactions fetches recent transactions for analysis.
 func recordSolanaTransactions(ctx context.Context, client *rpc.Client, cfg Config, logger *slog.Logger) error {
-	// Get current slot for context
 	slot, err := client.GetSlot(ctx, rpc.CommitmentFinalized)
 	if err != nil {
 		return fmt.Errorf("failed to get current slot: %w", err)
@@ -671,19 +639,16 @@ func recordSolanaTransactions(ctx context.Context, client *rpc.Client, cfg Confi
 				continue
 			}
 
-			// Get signature
 			sig := ""
 			if len(parsed.Signatures) > 0 {
 				sig = parsed.Signatures[0].String()
 			}
 
-			// Extract accounts
 			accounts := make([]string, len(parsed.Message.AccountKeys))
 			for j, acc := range parsed.Message.AccountKeys {
 				accounts[j] = acc.String()
 			}
 
-			// Extract program IDs from instructions
 			programIDs := make([]string, 0)
 			seenPrograms := make(map[string]bool)
 			for _, inst := range parsed.Message.Instructions {
@@ -747,7 +712,6 @@ func recordSolanaTransactions(ctx context.Context, client *rpc.Client, cfg Confi
 	return nil
 }
 
-// recordSolanaAccounts fetches account data for specified addresses.
 func recordSolanaAccounts(ctx context.Context, client *rpc.Client, cfg Config, logger *slog.Logger) error {
 	if cfg.ContractAddr == "" {
 		return fmt.Errorf("account address required for Solana account recording (use -contract flag)")
@@ -789,8 +753,7 @@ func recordSolanaAccounts(ctx context.Context, client *rpc.Client, cfg Config, l
 		DataLen:    len(binaryData),
 	}
 
-	// Include data if it's small enough (base64 encoded)
-	if len(binaryData) <= 10240 { // 10KB limit
+	if len(binaryData) <= 10240 {
 		accountFixture.Data = base64.StdEncoding.EncodeToString(binaryData)
 	}
 
@@ -824,7 +787,6 @@ func recordSolanaAccounts(ctx context.Context, client *rpc.Client, cfg Config, l
 	return nil
 }
 
-// saveFixture saves a fixture to a JSON file.
 func saveFixture(filename string, fixture Fixture) error {
 	data, err := json.MarshalIndent(fixture, "", "  ")
 	if err != nil {

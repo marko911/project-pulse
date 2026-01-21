@@ -14,45 +14,34 @@ import (
 	"github.com/marko911/project-pulse/internal/platform/storage"
 )
 
-// PublisherConfig holds configuration for the outbox publisher.
 type PublisherConfig struct {
 	Brokers      string
 	PollInterval time.Duration
 	BatchSize    int
 	Workers      int
-	// NATS configuration for WebSocket fanout
 	NATSUrl     string
 	NATSEnabled bool
 }
 
-// Publisher polls the outbox table and publishes messages to Kafka/Redpanda.
 type Publisher struct {
 	cfg    PublisherConfig
 	db     *storage.DB
 	repo   *storage.OutboxRepository
 	client *kgo.Client
-	// NATS client for WebSocket fanout (optional)
 	nats *pnats.Client
 }
 
-// NewPublisher creates a new Publisher instance.
 func NewPublisher(ctx context.Context, cfg PublisherConfig, db *storage.DB) (*Publisher, error) {
-	// Parse brokers
 	brokerList := strings.Split(cfg.Brokers, ",")
 	for i := range brokerList {
 		brokerList[i] = strings.TrimSpace(brokerList[i])
 	}
 
-	// Create Kafka client with ordering guarantees
 	client, err := kgo.NewClient(
 		kgo.SeedBrokers(brokerList...),
-		// Ensure ordering: only one request in flight per partition
 		kgo.MaxProduceRequestsInflightPerBroker(1),
-		// Wait for all replicas to acknowledge
 		kgo.RequiredAcks(kgo.AllISRAcks()),
-		// Enable idempotent producer for exactly-once semantics
 		kgo.ProducerBatchCompression(kgo.SnappyCompression()),
-		// Retry on transient errors
 		kgo.RecordRetries(5),
 		kgo.RetryBackoffFn(func(n int) time.Duration {
 			return time.Duration(n*100) * time.Millisecond
@@ -69,7 +58,6 @@ func NewPublisher(ctx context.Context, cfg PublisherConfig, db *storage.DB) (*Pu
 		client: client,
 	}
 
-	// Initialize NATS if enabled
 	if cfg.NATSEnabled && cfg.NATSUrl != "" {
 		natsCfg := pnats.DefaultConfig()
 		natsCfg.URL = cfg.NATSUrl
@@ -82,7 +70,6 @@ func NewPublisher(ctx context.Context, cfg PublisherConfig, db *storage.DB) (*Pu
 		}
 		p.nats = natsClient
 
-		// Ensure the canonical events stream exists
 		streamCfg := pnats.DefaultCanonicalEventsStreamConfig()
 		if _, err := pnats.EnsureStream(ctx, natsClient.JetStream(), streamCfg); err != nil {
 			client.Close()
@@ -96,7 +83,6 @@ func NewPublisher(ctx context.Context, cfg PublisherConfig, db *storage.DB) (*Pu
 	return p, nil
 }
 
-// Run starts the publisher polling loop.
 func (p *Publisher) Run(ctx context.Context) error {
 	slog.Info("Starting publisher polling loop",
 		"poll_interval", p.cfg.PollInterval,
@@ -118,9 +104,7 @@ func (p *Publisher) Run(ctx context.Context) error {
 	}
 }
 
-// pollAndPublish fetches pending messages and publishes them.
 func (p *Publisher) pollAndPublish(ctx context.Context) error {
-	// Fetch pending messages in order
 	messages, err := p.repo.FetchPendingMessages(ctx, p.cfg.BatchSize)
 	if err != nil {
 		return fmt.Errorf("fetch pending messages: %w", err)
@@ -132,13 +116,11 @@ func (p *Publisher) pollAndPublish(ctx context.Context) error {
 
 	slog.Debug("Fetched pending messages", "count", len(messages))
 
-	// Extract IDs for claiming
 	ids := make([]int64, len(messages))
 	for i, msg := range messages {
 		ids[i] = msg.ID
 	}
 
-	// Atomically claim messages (mark as processing)
 	claimed, err := p.repo.MarkAsProcessing(ctx, ids)
 	if err != nil {
 		return fmt.Errorf("mark as processing: %w", err)
@@ -150,13 +132,11 @@ func (p *Publisher) pollAndPublish(ctx context.Context) error {
 
 	slog.Info("Claimed messages for publishing", "count", len(claimed))
 
-	// Build a map of claimed IDs for filtering
 	claimedSet := make(map[int64]bool)
 	for _, id := range claimed {
 		claimedSet[id] = true
 	}
 
-	// Publish only claimed messages, maintaining order
 	var wg sync.WaitGroup
 	results := make(chan publishResult, len(claimed))
 
@@ -173,13 +153,11 @@ func (p *Publisher) pollAndPublish(ctx context.Context) error {
 		}(msg)
 	}
 
-	// Wait for all publishes to complete
 	go func() {
 		wg.Wait()
 		close(results)
 	}()
 
-	// Collect successful and failed IDs
 	var successIDs []int64
 	for result := range results {
 		if result.err != nil {
@@ -198,7 +176,6 @@ func (p *Publisher) pollAndPublish(ctx context.Context) error {
 		}
 	}
 
-	// Mark successful messages as published
 	if len(successIDs) > 0 {
 		if err := p.repo.MarkAsPublished(ctx, successIDs); err != nil {
 			return fmt.Errorf("mark as published: %w", err)
@@ -214,7 +191,6 @@ type publishResult struct {
 	err error
 }
 
-// publishMessage publishes a single message to Kafka and optionally to NATS.
 func (p *Publisher) publishMessage(ctx context.Context, msg storage.OutboxMessage) error {
 	record := &kgo.Record{
 		Topic: msg.Topic,
@@ -227,16 +203,13 @@ func (p *Publisher) publishMessage(ctx context.Context, msg storage.OutboxMessag
 		},
 	}
 
-	// Produce synchronously to maintain ordering within a partition
 	results := p.client.ProduceSync(ctx, record)
 	if err := results.FirstErr(); err != nil {
 		return fmt.Errorf("kafka produce: %w", err)
 	}
 
-	// Publish to NATS for WebSocket fanout (if enabled)
 	if p.nats != nil {
 		if err := p.publishToNATS(ctx, msg); err != nil {
-			// Log but don't fail - Kafka is the primary store
 			slog.Warn("NATS publish failed",
 				"event_id", msg.EventID,
 				"error", err,
@@ -247,13 +220,10 @@ func (p *Publisher) publishMessage(ctx context.Context, msg storage.OutboxMessag
 	return nil
 }
 
-// publishToNATS publishes a message to NATS JetStream for WebSocket fanout.
 func (p *Publisher) publishToNATS(ctx context.Context, msg storage.OutboxMessage) error {
-	// Build the NATS subject: events.canonical.<chain>.<event_type>
 	chainName := chainIDToName(msg.Chain)
 	subject := pnats.SubjectForEvent(chainName, msg.EventType)
 
-	// Publish to JetStream
 	_, err := p.nats.JetStream().Publish(ctx, subject, msg.Payload)
 	if err != nil {
 		return fmt.Errorf("jetstream publish: %w", err)
@@ -262,7 +232,6 @@ func (p *Publisher) publishToNATS(ctx context.Context, msg storage.OutboxMessage
 	return nil
 }
 
-// chainIDToName converts chain ID to a lowercase string name for NATS subjects.
 func chainIDToName(chainID int16) string {
 	switch chainID {
 	case 1:
@@ -286,18 +255,15 @@ func chainIDToName(chainID int16) string {
 	}
 }
 
-// shutdown gracefully shuts down the publisher.
 func (p *Publisher) shutdown() error {
 	slog.Info("Shutting down publisher")
 
-	// Flush any pending Kafka messages
 	if err := p.client.Flush(context.Background()); err != nil {
 		slog.Error("Error flushing Kafka messages", "error", err)
 	}
 
 	p.client.Close()
 
-	// Close NATS connection
 	if p.nats != nil {
 		if err := p.nats.Close(); err != nil {
 			slog.Error("Error closing NATS connection", "error", err)

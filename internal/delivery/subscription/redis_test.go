@@ -35,7 +35,6 @@ func TestRedisManager_Subscribe(t *testing.T) {
 	client := getTestRedisClient(t)
 	defer client.Close()
 
-	// Use unique prefix for test isolation
 	prefix := "test:" + time.Now().Format("20060102150405") + ":"
 	mgr := NewRedisManagerWithClient(client, prefix)
 	defer cleanup(t, client, prefix)
@@ -58,7 +57,6 @@ func TestRedisManager_Subscribe(t *testing.T) {
 		t.Fatal("Expected non-empty subscription ID")
 	}
 
-	// Verify subscription exists
 	got, err := mgr.Get(ctx, subID)
 	if err != nil {
 		t.Fatalf("Get failed: %v", err)
@@ -81,7 +79,6 @@ func TestRedisManager_Match(t *testing.T) {
 
 	ctx := context.Background()
 
-	// Create subscriptions with different filters
 	sub1 := &Subscription{
 		ClientID: "client_1",
 		Filter: Filter{
@@ -106,7 +103,6 @@ func TestRedisManager_Match(t *testing.T) {
 	mgr.Subscribe(ctx, sub2)
 	mgr.Subscribe(ctx, sub3)
 
-	// Event that matches sub1 and sub2
 	event := &protov1.CanonicalEvent{
 		EventId:   "evt_1",
 		Chain:     protov1.Chain_CHAIN_ETHEREUM,
@@ -155,18 +151,15 @@ func TestRedisManager_Unsubscribe(t *testing.T) {
 
 	subID, _ := mgr.Subscribe(ctx, sub)
 
-	// Verify it exists
 	got, _ := mgr.Get(ctx, subID)
 	if got == nil {
 		t.Fatal("Subscription should exist before unsubscribe")
 	}
 
-	// Unsubscribe
 	if err := mgr.Unsubscribe(ctx, subID); err != nil {
 		t.Fatalf("Unsubscribe failed: %v", err)
 	}
 
-	// Verify it's gone
 	got, _ = mgr.Get(ctx, subID)
 	if got != nil {
 		t.Fatal("Subscription should not exist after unsubscribe")
@@ -183,7 +176,6 @@ func TestRedisManager_ListByClient(t *testing.T) {
 
 	ctx := context.Background()
 
-	// Create multiple subscriptions for same client
 	for i := 0; i < 3; i++ {
 		sub := &Subscription{
 			ClientID: "client_multi",
@@ -194,7 +186,6 @@ func TestRedisManager_ListByClient(t *testing.T) {
 		mgr.Subscribe(ctx, sub)
 	}
 
-	// Also create one for different client
 	mgr.Subscribe(ctx, &Subscription{
 		ClientID: "other_client",
 		Filter:   Filter{},
@@ -220,7 +211,6 @@ func TestRedisManager_UnsubscribeAll(t *testing.T) {
 
 	ctx := context.Background()
 
-	// Create multiple subscriptions
 	for i := 0; i < 3; i++ {
 		mgr.Subscribe(ctx, &Subscription{
 			ClientID: "client_unsub_all",
@@ -228,18 +218,15 @@ func TestRedisManager_UnsubscribeAll(t *testing.T) {
 		})
 	}
 
-	// Verify they exist
 	subs, _ := mgr.ListByClient(ctx, "client_unsub_all")
 	if len(subs) != 3 {
 		t.Fatalf("Expected 3 subs before unsubscribe, got %d", len(subs))
 	}
 
-	// Unsubscribe all
 	if err := mgr.UnsubscribeAll(ctx, "client_unsub_all"); err != nil {
 		t.Fatalf("UnsubscribeAll failed: %v", err)
 	}
 
-	// Verify they're gone
 	subs, _ = mgr.ListByClient(ctx, "client_unsub_all")
 	if len(subs) != 0 {
 		t.Errorf("Expected 0 subs after unsubscribe, got %d", len(subs))
@@ -256,13 +243,11 @@ func TestRedisManager_WildcardSubscription(t *testing.T) {
 
 	ctx := context.Background()
 
-	// Create a wildcard subscription (empty filter)
 	mgr.Subscribe(ctx, &Subscription{
 		ClientID: "wildcard_client",
-		Filter:   Filter{}, // matches everything
+		Filter:   Filter{},
 	})
 
-	// Any event should match
 	event := &protov1.CanonicalEvent{
 		EventId:   "evt_wild",
 		Chain:     protov1.Chain_CHAIN_POLYGON,
@@ -289,7 +274,6 @@ func TestRedisManager_Cleanup(t *testing.T) {
 
 	ctx := context.Background()
 
-	// Create an already-expired subscription
 	pastTime := time.Now().Add(-time.Hour)
 	mgr.Subscribe(ctx, &Subscription{
 		ClientID:  "expired_client",
@@ -297,7 +281,6 @@ func TestRedisManager_Cleanup(t *testing.T) {
 		ExpiresAt: pastTime,
 	})
 
-	// Create a valid subscription
 	futureTime := time.Now().Add(time.Hour)
 	mgr.Subscribe(ctx, &Subscription{
 		ClientID:  "valid_client",
@@ -305,7 +288,6 @@ func TestRedisManager_Cleanup(t *testing.T) {
 		ExpiresAt: futureTime,
 	})
 
-	// Run cleanup
 	cleaned, err := mgr.Cleanup(ctx)
 	if err != nil {
 		t.Fatalf("Cleanup failed: %v", err)
@@ -315,20 +297,17 @@ func TestRedisManager_Cleanup(t *testing.T) {
 		t.Errorf("Expected 1 cleaned, got %d", cleaned)
 	}
 
-	// Verify valid one still exists
 	subs, _ := mgr.ListByClient(ctx, "valid_client")
 	if len(subs) != 1 {
 		t.Error("Valid subscription should still exist")
 	}
 
-	// Verify expired one is gone
 	subs, _ = mgr.ListByClient(ctx, "expired_client")
 	if len(subs) != 0 {
 		t.Error("Expired subscription should be removed")
 	}
 }
 
-// cleanup removes all test keys
 func cleanup(t *testing.T, client *redis.Client, prefix string) {
 	ctx := context.Background()
 	var cursor uint64

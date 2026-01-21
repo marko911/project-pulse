@@ -12,19 +12,17 @@ import (
 	protov1 "github.com/marko911/project-pulse/pkg/proto/v1"
 )
 
-// Redis key patterns for triggers
 const (
-	keyTrigger        = "trigger:"           // trigger:{id} -> Trigger JSON
-	keyTenantTriggers = "tenant:triggers:"   // tenant:triggers:{tenantID} -> SET of trigger IDs
-	keyFuncTriggers   = "func:triggers:"     // func:triggers:{funcID} -> SET of trigger IDs
-	keyChainTriggers  = "idx:chain:"         // idx:chain:{chain} -> SET of trigger IDs
-	keyEventTriggers  = "idx:event:"         // idx:event:{eventType} -> SET of trigger IDs
-	keyAccountTriggers= "idx:account:"       // idx:account:{account} -> SET of trigger IDs
-	keyProgramTriggers= "idx:program:"       // idx:program:{programId} -> SET of trigger IDs
-	keyAllTriggers    = "all_triggers"       // SET of all active trigger IDs
+	keyTrigger        = "trigger:"
+	keyTenantTriggers = "tenant:triggers:"
+	keyFuncTriggers   = "func:triggers:"
+	keyChainTriggers  = "idx:chain:"
+	keyEventTriggers  = "idx:event:"
+	keyAccountTriggers= "idx:account:"
+	keyProgramTriggers= "idx:program:"
+	keyAllTriggers    = "all_triggers"
 )
 
-// Trigger represents a user-defined event trigger.
 type Trigger struct {
 	ID          string          `json:"id"`
 	TenantID    string          `json:"tenant_id"`
@@ -37,27 +35,19 @@ type Trigger struct {
 	UpdatedAt   time.Time       `json:"updated_at"`
 }
 
-// TriggerFilter defines the event matching criteria.
 type TriggerFilter struct {
-	// Chain filter (empty = all chains)
 	Chains []protov1.Chain `json:"chains,omitempty"`
 
-	// Event type filter (empty = all types)
 	EventTypes []string `json:"event_types,omitempty"`
 
-	// Account filter (empty = all accounts)
 	Accounts []string `json:"accounts,omitempty"`
 
-	// Program ID filter (for Solana, empty = all programs)
 	ProgramIDs []string `json:"program_ids,omitempty"`
 
-	// Contract address filter (for EVM, empty = all contracts)
 	Contracts []string `json:"contracts,omitempty"`
 }
 
-// Matches checks if an event matches this filter.
 func (f *TriggerFilter) Matches(event *protov1.CanonicalEvent) bool {
-	// Chain filter
 	if len(f.Chains) > 0 {
 		matched := false
 		for _, chain := range f.Chains {
@@ -71,7 +61,6 @@ func (f *TriggerFilter) Matches(event *protov1.CanonicalEvent) bool {
 		}
 	}
 
-	// Event type filter
 	if len(f.EventTypes) > 0 {
 		matched := false
 		for _, et := range f.EventTypes {
@@ -85,7 +74,6 @@ func (f *TriggerFilter) Matches(event *protov1.CanonicalEvent) bool {
 		}
 	}
 
-	// Account filter
 	if len(f.Accounts) > 0 {
 		matched := false
 		for _, filterAccount := range f.Accounts {
@@ -104,7 +92,6 @@ func (f *TriggerFilter) Matches(event *protov1.CanonicalEvent) bool {
 		}
 	}
 
-	// Program ID filter
 	if len(f.ProgramIDs) > 0 {
 		matched := false
 		for _, pid := range f.ProgramIDs {
@@ -118,7 +105,6 @@ func (f *TriggerFilter) Matches(event *protov1.CanonicalEvent) bool {
 		}
 	}
 
-	// Contract filter (stored in accounts for EVM events)
 	if len(f.Contracts) > 0 {
 		matched := false
 		for _, contract := range f.Contracts {
@@ -140,7 +126,6 @@ func (f *TriggerFilter) Matches(event *protov1.CanonicalEvent) bool {
 	return true
 }
 
-// FunctionInvocation represents a request to invoke a WASM function.
 type FunctionInvocation struct {
 	InvocationID string                   `json:"invocation_id"`
 	FunctionID   string                   `json:"function_id"`
@@ -150,13 +135,11 @@ type FunctionInvocation struct {
 	CreatedAt    time.Time                `json:"created_at"`
 }
 
-// TriggerManager manages triggers stored in Redis.
 type TriggerManager struct {
 	client    *redis.Client
 	keyPrefix string
 }
 
-// NewTriggerManager creates a new TriggerManager.
 func NewTriggerManager(client *redis.Client, prefix string) *TriggerManager {
 	return &TriggerManager{
 		client:    client,
@@ -172,7 +155,6 @@ func (m *TriggerManager) key(parts ...string) string {
 	return result
 }
 
-// Create stores a new trigger.
 func (m *TriggerManager) Create(ctx context.Context, trigger *Trigger) error {
 	if trigger.ID == "" {
 		trigger.ID = generateTriggerID()
@@ -188,19 +170,14 @@ func (m *TriggerManager) Create(ctx context.Context, trigger *Trigger) error {
 
 	pipe := m.client.TxPipeline()
 
-	// Store trigger
 	pipe.Set(ctx, m.key(keyTrigger, trigger.ID), data, 0)
 
-	// Index by tenant
 	pipe.SAdd(ctx, m.key(keyTenantTriggers, trigger.TenantID), trigger.ID)
 
-	// Index by function
 	pipe.SAdd(ctx, m.key(keyFuncTriggers, trigger.FunctionID), trigger.ID)
 
-	// Add to all triggers set
 	pipe.SAdd(ctx, m.key(keyAllTriggers), trigger.ID)
 
-	// Build filter indexes
 	m.addFilterIndexes(ctx, pipe, trigger)
 
 	_, err = pipe.Exec(ctx)
@@ -235,7 +212,6 @@ func (m *TriggerManager) addFilterIndexes(ctx context.Context, pipe redis.Pipeli
 	}
 }
 
-// Get retrieves a trigger by ID.
 func (m *TriggerManager) Get(ctx context.Context, id string) (*Trigger, error) {
 	data, err := m.client.Get(ctx, m.key(keyTrigger, id)).Bytes()
 	if err == redis.Nil {
@@ -253,7 +229,6 @@ func (m *TriggerManager) Get(ctx context.Context, id string) (*Trigger, error) {
 	return &trigger, nil
 }
 
-// Delete removes a trigger.
 func (m *TriggerManager) Delete(ctx context.Context, id string) error {
 	trigger, err := m.Get(ctx, id)
 	if err != nil {
@@ -265,15 +240,12 @@ func (m *TriggerManager) Delete(ctx context.Context, id string) error {
 
 	pipe := m.client.TxPipeline()
 
-	// Remove trigger data
 	pipe.Del(ctx, m.key(keyTrigger, id))
 
-	// Remove from indexes
 	pipe.SRem(ctx, m.key(keyTenantTriggers, trigger.TenantID), id)
 	pipe.SRem(ctx, m.key(keyFuncTriggers, trigger.FunctionID), id)
 	pipe.SRem(ctx, m.key(keyAllTriggers), id)
 
-	// Remove from filter indexes
 	m.removeFilterIndexes(ctx, pipe, trigger)
 
 	_, err = pipe.Exec(ctx)
@@ -304,7 +276,6 @@ func (m *TriggerManager) removeFilterIndexes(ctx context.Context, pipe redis.Pip
 	}
 }
 
-// ListByTenant returns all triggers for a tenant.
 func (m *TriggerManager) ListByTenant(ctx context.Context, tenantID string) ([]*Trigger, error) {
 	ids, err := m.client.SMembers(ctx, m.key(keyTenantTriggers, tenantID)).Result()
 	if err != nil {
@@ -314,7 +285,6 @@ func (m *TriggerManager) ListByTenant(ctx context.Context, tenantID string) ([]*
 	return m.fetchTriggers(ctx, ids)
 }
 
-// ListByFunction returns all triggers for a function.
 func (m *TriggerManager) ListByFunction(ctx context.Context, functionID string) ([]*Trigger, error) {
 	ids, err := m.client.SMembers(ctx, m.key(keyFuncTriggers, functionID)).Result()
 	if err != nil {
@@ -359,19 +329,15 @@ func (m *TriggerManager) fetchTriggers(ctx context.Context, ids []string) ([]*Tr
 	return triggers, nil
 }
 
-// Match finds all triggers that match the given event.
 func (m *TriggerManager) Match(ctx context.Context, event *protov1.CanonicalEvent) ([]*Trigger, error) {
-	// Gather candidate trigger IDs from indexes
 	candidates := make(map[string]bool)
 
-	// Get triggers for this chain
 	chainKey := m.key(keyChainTriggers, strconv.Itoa(int(event.Chain)))
 	chainIDs, _ := m.client.SMembers(ctx, chainKey).Result()
 	for _, id := range chainIDs {
 		candidates[id] = true
 	}
 
-	// Get triggers for this event type
 	if event.EventType != "" {
 		typeKey := m.key(keyEventTriggers, event.EventType)
 		typeIDs, _ := m.client.SMembers(ctx, typeKey).Result()
@@ -380,7 +346,6 @@ func (m *TriggerManager) Match(ctx context.Context, event *protov1.CanonicalEven
 		}
 	}
 
-	// Get triggers for involved accounts
 	for _, account := range event.Accounts {
 		acctKey := m.key(keyAccountTriggers, account)
 		acctIDs, _ := m.client.SMembers(ctx, acctKey).Result()
@@ -389,7 +354,6 @@ func (m *TriggerManager) Match(ctx context.Context, event *protov1.CanonicalEven
 		}
 	}
 
-	// Get triggers for program ID
 	if event.ProgramId != "" {
 		progKey := m.key(keyProgramTriggers, event.ProgramId)
 		progIDs, _ := m.client.SMembers(ctx, progKey).Result()
@@ -398,7 +362,6 @@ func (m *TriggerManager) Match(ctx context.Context, event *protov1.CanonicalEven
 		}
 	}
 
-	// Also consider triggers with no specific filters (match all)
 	allIDs, _ := m.client.SMembers(ctx, m.key(keyAllTriggers)).Result()
 	for _, id := range allIDs {
 		candidates[id] = true
@@ -408,7 +371,6 @@ func (m *TriggerManager) Match(ctx context.Context, event *protov1.CanonicalEven
 		return nil, nil
 	}
 
-	// Fetch and verify candidates
 	candidateList := make([]string, 0, len(candidates))
 	for id := range candidates {
 		candidateList = append(candidateList, id)
@@ -419,7 +381,6 @@ func (m *TriggerManager) Match(ctx context.Context, event *protov1.CanonicalEven
 		return nil, err
 	}
 
-	// Full filter matching
 	var matches []*Trigger
 	for _, trigger := range triggers {
 		if !trigger.Enabled {
@@ -433,7 +394,6 @@ func (m *TriggerManager) Match(ctx context.Context, event *protov1.CanonicalEven
 	return matches, nil
 }
 
-// generateTriggerID creates a unique trigger ID.
 func generateTriggerID() string {
 	return fmt.Sprintf("trg_%d_%d", time.Now().UnixNano(), time.Now().Nanosecond()%1000)
 }

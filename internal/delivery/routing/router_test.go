@@ -12,7 +12,6 @@ import (
 	"github.com/marko911/project-pulse/internal/delivery/subscription"
 )
 
-// mockSubscriptionManager implements subscription.Manager for testing.
 type mockSubscriptionManager struct {
 	subscriptions map[string]*subscription.Subscription
 	mu            sync.RWMutex
@@ -115,7 +114,6 @@ func (m *mockSubscriptionManager) Close() error {
 	return nil
 }
 
-// mockDestination implements Destination for testing.
 type mockDestination struct {
 	id          string
 	received    []*protov1.CanonicalEvent
@@ -178,11 +176,9 @@ func (d *mockDestination) ReceivedEvents() []*protov1.CanonicalEvent {
 func TestRouter_RouteSync(t *testing.T) {
 	ctx := context.Background()
 
-	// Setup
 	subMgr := newMockSubscriptionManager()
 	destReg := NewInMemoryDestinationRegistry()
 
-	// Create subscription
 	subMgr.Subscribe(ctx, &subscription.Subscription{
 		ClientID: "client_1",
 		Filter: subscription.Filter{
@@ -190,15 +186,12 @@ func TestRouter_RouteSync(t *testing.T) {
 		},
 	})
 
-	// Create destination
 	dest := newMockDestination("client_1")
 	destReg.Register("client_1", dest)
 
-	// Create router
 	cfg := DefaultRouterConfig()
 	router := NewRouter(subMgr, destReg, cfg)
 
-	// Route event
 	event := &protov1.CanonicalEvent{
 		EventId: "evt_1",
 		Chain:   protov1.Chain_CHAIN_ETHEREUM,
@@ -209,10 +202,8 @@ func TestRouter_RouteSync(t *testing.T) {
 		t.Fatalf("RouteSync failed: %v", err)
 	}
 
-	// Give time for async delivery
 	time.Sleep(10 * time.Millisecond)
 
-	// Verify
 	if dest.ReceivedCount() != 1 {
 		t.Errorf("Expected 1 event, got %d", dest.ReceivedCount())
 	}
@@ -232,7 +223,6 @@ func TestRouter_NoMatch(t *testing.T) {
 	subMgr := newMockSubscriptionManager()
 	destReg := NewInMemoryDestinationRegistry()
 
-	// Subscription for Ethereum
 	subMgr.Subscribe(ctx, &subscription.Subscription{
 		ClientID: "client_1",
 		Filter: subscription.Filter{
@@ -245,7 +235,6 @@ func TestRouter_NoMatch(t *testing.T) {
 
 	router := NewRouter(subMgr, destReg, DefaultRouterConfig())
 
-	// Route Solana event (no match)
 	event := &protov1.CanonicalEvent{
 		EventId: "evt_1",
 		Chain:   protov1.Chain_CHAIN_SOLANA,
@@ -265,7 +254,6 @@ func TestRouter_MultipleSubscriptions(t *testing.T) {
 	subMgr := newMockSubscriptionManager()
 	destReg := NewInMemoryDestinationRegistry()
 
-	// Two subscriptions for different clients, both matching Ethereum
 	subMgr.Subscribe(ctx, &subscription.Subscription{
 		ID:       "sub_1",
 		ClientID: "client_1",
@@ -288,7 +276,6 @@ func TestRouter_MultipleSubscriptions(t *testing.T) {
 
 	router := NewRouter(subMgr, destReg, DefaultRouterConfig())
 
-	// Event matches both subscriptions
 	event := &protov1.CanonicalEvent{
 		EventId:   "evt_1",
 		Chain:     protov1.Chain_CHAIN_ETHEREUM,
@@ -314,7 +301,7 @@ func TestRouter_BatchRouting(t *testing.T) {
 
 	subMgr.Subscribe(ctx, &subscription.Subscription{
 		ClientID: "client_1",
-		Filter:   subscription.Filter{}, // Match all
+		Filter:   subscription.Filter{},
 	})
 
 	dest := newMockDestination("client_1")
@@ -322,7 +309,6 @@ func TestRouter_BatchRouting(t *testing.T) {
 
 	router := NewRouter(subMgr, destReg, DefaultRouterConfig())
 
-	// Route batch
 	events := make([]*protov1.CanonicalEvent, 10)
 	for i := 0; i < 10; i++ {
 		events[i] = &protov1.CanonicalEvent{
@@ -366,7 +352,6 @@ func TestRouter_AsyncWorkers(t *testing.T) {
 	router.Start(ctx)
 	defer router.Stop()
 
-	// Queue multiple events
 	for i := 0; i < 20; i++ {
 		event := &protov1.CanonicalEvent{
 			EventId: "evt_" + string(rune('a'+i)),
@@ -375,7 +360,6 @@ func TestRouter_AsyncWorkers(t *testing.T) {
 		router.Route(event)
 	}
 
-	// Wait for processing
 	time.Sleep(200 * time.Millisecond)
 
 	received := dest.ReceivedCount()
@@ -395,7 +379,6 @@ func TestRouter_DestinationNotFound(t *testing.T) {
 	subMgr := newMockSubscriptionManager()
 	destReg := NewInMemoryDestinationRegistry()
 
-	// Subscription exists but destination doesn't
 	subMgr.Subscribe(ctx, &subscription.Subscription{
 		ClientID: "missing_client",
 		Filter:   subscription.Filter{},
@@ -408,7 +391,6 @@ func TestRouter_DestinationNotFound(t *testing.T) {
 		Chain:   protov1.Chain_CHAIN_ETHEREUM,
 	}
 
-	// Should not error, just skip the missing destination
 	err := router.RouteSync(ctx, event)
 	if err != nil {
 		t.Errorf("RouteSync should not error for missing destination: %v", err)
@@ -462,23 +444,19 @@ func TestInMemoryDestinationRegistry(t *testing.T) {
 	dest1 := newMockDestination("dest_1")
 	dest2 := newMockDestination("dest_2")
 
-	// Register
 	reg.Register("client_1", dest1)
 	reg.Register("client_2", dest2)
 
-	// Get
 	got, ok := reg.Get("client_1")
 	if !ok || got.ID() != "dest_1" {
 		t.Error("Failed to get client_1")
 	}
 
-	// All
 	all := reg.All()
 	if len(all) != 2 {
 		t.Errorf("Expected 2 destinations, got %d", len(all))
 	}
 
-	// Unregister
 	reg.Unregister("client_1")
 	_, ok = reg.Get("client_1")
 	if ok {

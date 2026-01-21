@@ -124,7 +124,7 @@ func TestVerify_TxCountDrift(t *testing.T) {
 		BlockNumber:      12345,
 		BlockHash:        "0xabcdef1234567890",
 		ParentHash:       "0x1234567890abcdef",
-		TransactionCount: 155, // Different tx count
+		TransactionCount: 155,
 		Timestamp:        now,
 	}
 
@@ -153,7 +153,7 @@ func TestVerify_ChainMismatch(t *testing.T) {
 	}
 
 	golden := &BlockData{
-		Chain:            protov1.Chain_CHAIN_POLYGON, // Different chain!
+		Chain:            protov1.Chain_CHAIN_POLYGON,
 		BlockNumber:      12345,
 		BlockHash:        "0xabcdef1234567890",
 		ParentHash:       "0x1234567890abcdef",

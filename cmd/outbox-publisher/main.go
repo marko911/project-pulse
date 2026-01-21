@@ -1,5 +1,3 @@
-// Package main implements the outbox publisher service.
-// This service polls the transactional outbox table and publishes events to Redpanda/Kafka.
 package main
 
 import (
@@ -15,7 +13,6 @@ import (
 )
 
 func main() {
-	// Configuration flags
 	var (
 		dbHost     = flag.String("db-host", envOrDefault("DB_HOST", "localhost"), "Database host")
 		dbPort     = flag.Int("db-port", envOrDefaultInt("DB_PORT", 5432), "Database port")
@@ -28,13 +25,11 @@ func main() {
 		batchSize    = flag.Int("batch-size", 100, "Maximum messages to fetch per poll")
 		workers      = flag.Int("workers", 1, "Number of publisher workers (1 for strict ordering)")
 
-		// NATS JetStream configuration for WebSocket fanout
 		natsEnabled = flag.Bool("nats-enabled", envOrDefaultBool("NATS_ENABLED", true), "Enable NATS JetStream fanout")
 		natsURL     = flag.String("nats-url", envOrDefault("NATS_URL", "nats://localhost:4222"), "NATS server URL")
 	)
 	flag.Parse()
 
-	// Setup structured logging
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
 		Level: slog.LevelInfo,
 	}))
@@ -49,7 +44,6 @@ func main() {
 		"nats_url", *natsURL,
 	)
 
-	// Create database connection
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -71,7 +65,6 @@ func main() {
 
 	slog.Info("Connected to database", "host", *dbHost, "database", *dbName)
 
-	// Create publisher
 	publisher, err := NewPublisher(ctx, PublisherConfig{
 		Brokers:      *brokers,
 		PollInterval: *pollInterval,
@@ -85,7 +78,6 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Setup graceful shutdown
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 
@@ -95,7 +87,6 @@ func main() {
 		cancel()
 	}()
 
-	// Run the publisher
 	if err := publisher.Run(ctx); err != nil && ctx.Err() == nil {
 		slog.Error("Publisher error", "error", err)
 		os.Exit(1)

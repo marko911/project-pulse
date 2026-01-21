@@ -14,34 +14,24 @@ import (
 	protov1 "github.com/marko911/project-pulse/pkg/proto/v1"
 )
 
-// OrchestratorConfig configures the backfill orchestrator.
 type OrchestratorConfig struct {
-	// Brokers is the list of Kafka/Redpanda brokers.
 	Brokers []string
 
-	// GapEventsTopic is the topic to consume gap events from.
 	GapEventsTopic string
 
-	// BackfillRequestsTopic is the topic to publish backfill requests to.
 	BackfillRequestsTopic string
 
-	// BackfillResultsTopic is the topic to consume backfill results from (optional).
 	BackfillResultsTopic string
 
-	// ConsumerGroup is the consumer group ID.
 	ConsumerGroup string
 
-	// MaxRetries is the maximum number of retries for a backfill request.
 	MaxRetries int
 
-	// DefaultPriority is the default priority for backfill requests.
 	DefaultPriority BackfillPriority
 
-	// MaxConcurrentBackfills limits how many backfills can run simultaneously.
 	MaxConcurrentBackfills int
 }
 
-// DefaultOrchestratorConfig returns sensible defaults.
 func DefaultOrchestratorConfig() OrchestratorConfig {
 	return OrchestratorConfig{
 		GapEventsTopic:         "gap-events",
@@ -54,7 +44,6 @@ func DefaultOrchestratorConfig() OrchestratorConfig {
 	}
 }
 
-// Orchestrator coordinates backfill operations in response to gap events.
 type Orchestrator struct {
 	cfg    OrchestratorConfig
 	logger *slog.Logger
@@ -63,13 +52,12 @@ type Orchestrator struct {
 	producer *kgo.Client
 
 	mu       sync.RWMutex
-	pending  map[string]*BackfillTracker // requestID -> tracker
-	active   int                         // number of active backfills
+	pending  map[string]*BackfillTracker
+	active   int
 	stats    OrchestratorStats
 	shutdown bool
 }
 
-// OrchestratorStats tracks orchestrator metrics.
 type OrchestratorStats struct {
 	GapsReceived      uint64
 	BackfillsCreated  uint64
@@ -78,7 +66,6 @@ type OrchestratorStats struct {
 	TotalBlocksFilled uint64
 }
 
-// NewOrchestrator creates a new backfill orchestrator.
 func NewOrchestrator(cfg OrchestratorConfig, logger *slog.Logger) (*Orchestrator, error) {
 	if len(cfg.Brokers) == 0 {
 		return nil, fmt.Errorf("no brokers configured")
@@ -94,9 +81,7 @@ func NewOrchestrator(cfg OrchestratorConfig, logger *slog.Logger) (*Orchestrator
 	}, nil
 }
 
-// Start initializes Kafka clients and begins processing.
 func (o *Orchestrator) Start(ctx context.Context) error {
-	// Create consumer for gap events
 	consumerOpts := []kgo.Opt{
 		kgo.SeedBrokers(o.cfg.Brokers...),
 		kgo.ConsumerGroup(o.cfg.ConsumerGroup),
@@ -104,7 +89,6 @@ func (o *Orchestrator) Start(ctx context.Context) error {
 		kgo.ConsumeResetOffset(kgo.NewOffset().AtStart()),
 	}
 
-	// Also consume backfill results if configured
 	if o.cfg.BackfillResultsTopic != "" {
 		consumerOpts = append(consumerOpts,
 			kgo.ConsumeTopics(o.cfg.BackfillResultsTopic))
@@ -116,7 +100,6 @@ func (o *Orchestrator) Start(ctx context.Context) error {
 	}
 	o.consumer = consumer
 
-	// Create producer for backfill requests
 	producer, err := kgo.NewClient(
 		kgo.SeedBrokers(o.cfg.Brokers...),
 		kgo.RequiredAcks(kgo.AllISRAcks()),
@@ -135,7 +118,6 @@ func (o *Orchestrator) Start(ctx context.Context) error {
 	return nil
 }
 
-// Run processes gap events and orchestrates backfills until context is cancelled.
 func (o *Orchestrator) Run(ctx context.Context) error {
 	if o.consumer == nil {
 		return fmt.Errorf("orchestrator not started")
@@ -174,7 +156,6 @@ func (o *Orchestrator) Run(ctx context.Context) error {
 	}
 }
 
-// processRecord handles a single Kafka record.
 func (o *Orchestrator) processRecord(ctx context.Context, record *kgo.Record) error {
 	switch record.Topic {
 	case o.cfg.GapEventsTopic:
@@ -187,12 +168,11 @@ func (o *Orchestrator) processRecord(ctx context.Context, record *kgo.Record) er
 	}
 }
 
-// handleGapEvent processes a gap event and creates a backfill request.
 func (o *Orchestrator) handleGapEvent(ctx context.Context, record *kgo.Record) error {
 	var gap GapEvent
 	if err := json.Unmarshal(record.Value, &gap); err != nil {
 		o.logger.Warn("failed to parse gap event", "error", err)
-		return nil // Don't return error - skip malformed events
+		return nil
 	}
 
 	o.mu.Lock()
@@ -206,15 +186,12 @@ func (o *Orchestrator) handleGapEvent(ctx context.Context, record *kgo.Record) e
 		"gap_size", gap.GapSize,
 	)
 
-	// Create backfill request for the gap
 	request := o.createBackfillRequest(&gap)
 
-	// Publish backfill request
 	if err := o.publishBackfillRequest(ctx, request); err != nil {
 		return fmt.Errorf("publish backfill request: %w", err)
 	}
 
-	// Track the pending request
 	o.trackRequest(request)
 
 	o.logger.Info("backfill request created",
@@ -227,9 +204,7 @@ func (o *Orchestrator) handleGapEvent(ctx context.Context, record *kgo.Record) e
 	return nil
 }
 
-// createBackfillRequest creates a BackfillRequest from a GapEvent.
 func (o *Orchestrator) createBackfillRequest(gap *GapEvent) *BackfillRequest {
-	// Generate a unique request ID
 	requestID := uuid.New().String()
 
 	return &BackfillRequest{
@@ -237,7 +212,7 @@ func (o *Orchestrator) createBackfillRequest(gap *GapEvent) *BackfillRequest {
 		Chain:           gap.Chain,
 		CommitmentLevel: protov1.CommitmentLevel(gap.CommitmentLevel),
 		StartBlock:      gap.ExpectedBlock,
-		EndBlock:        gap.ReceivedBlock - 1, // Exclusive of received block
+		EndBlock:        gap.ReceivedBlock - 1,
 		Priority:        o.cfg.DefaultPriority,
 		SourceGapID:     gap.EventID,
 		RequestedAt:     time.Now(),
@@ -246,7 +221,6 @@ func (o *Orchestrator) createBackfillRequest(gap *GapEvent) *BackfillRequest {
 	}
 }
 
-// publishBackfillRequest publishes a backfill request to Kafka.
 func (o *Orchestrator) publishBackfillRequest(ctx context.Context, request *BackfillRequest) error {
 	data, err := json.Marshal(request)
 	if err != nil {
@@ -271,7 +245,6 @@ func (o *Orchestrator) publishBackfillRequest(ctx context.Context, request *Back
 	return nil
 }
 
-// trackRequest adds a request to the pending tracker.
 func (o *Orchestrator) trackRequest(request *BackfillRequest) {
 	o.mu.Lock()
 	defer o.mu.Unlock()
@@ -286,7 +259,6 @@ func (o *Orchestrator) trackRequest(request *BackfillRequest) {
 	o.active++
 }
 
-// handleBackfillResult processes a backfill result.
 func (o *Orchestrator) handleBackfillResult(ctx context.Context, record *kgo.Record) error {
 	var result BackfillResult
 	if err := json.Unmarshal(record.Value, &result); err != nil {
@@ -320,7 +292,6 @@ func (o *Orchestrator) handleBackfillResult(ctx context.Context, record *kgo.Rec
 		)
 
 	case BackfillStatusFailed:
-		// Check if we should retry
 		if tracker.Request.RetryCount < tracker.Request.MaxRetries {
 			o.logger.Warn("backfill failed, retrying",
 				"request_id", result.RequestID,
@@ -345,9 +316,7 @@ func (o *Orchestrator) handleBackfillResult(ctx context.Context, record *kgo.Rec
 	return nil
 }
 
-// retryBackfill re-publishes a backfill request for retry.
 func (o *Orchestrator) retryBackfill(ctx context.Context, request *BackfillRequest) {
-	// Add a small delay before retry
 	time.Sleep(time.Duration(request.RetryCount) * time.Second)
 
 	if err := o.publishBackfillRequest(ctx, request); err != nil {
@@ -358,28 +327,24 @@ func (o *Orchestrator) retryBackfill(ctx context.Context, request *BackfillReque
 	}
 }
 
-// GetStats returns current orchestrator statistics.
 func (o *Orchestrator) GetStats() OrchestratorStats {
 	o.mu.RLock()
 	defer o.mu.RUnlock()
 	return o.stats
 }
 
-// GetPendingCount returns the number of pending backfill requests.
 func (o *Orchestrator) GetPendingCount() int {
 	o.mu.RLock()
 	defer o.mu.RUnlock()
 	return len(o.pending)
 }
 
-// GetActiveCount returns the number of active backfills.
 func (o *Orchestrator) GetActiveCount() int {
 	o.mu.RLock()
 	defer o.mu.RUnlock()
 	return o.active
 }
 
-// Shutdown gracefully shuts down the orchestrator.
 func (o *Orchestrator) Shutdown(ctx context.Context) error {
 	o.mu.Lock()
 	o.shutdown = true

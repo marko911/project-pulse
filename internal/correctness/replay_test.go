@@ -14,26 +14,16 @@ import (
 	protov1 "github.com/marko911/project-pulse/pkg/proto/v1"
 )
 
-// TestDeterministicReplayWithReorg tests the full replay flow including reorg detection.
-// This test:
-// 1. Creates fixture files simulating a blockchain with a reorg
-// 2. Replays via FileSource
-// 3. Processes through ReorgDetector
-// 4. Verifies correct event sequence including retractions and replacements
 func TestDeterministicReplayWithReorg(t *testing.T) {
 	ctx := context.Background()
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelDebug}))
 
-	// Create temp directory for fixtures
 	tempDir, err := os.MkdirTemp("", "reorg-test-fixtures-*")
 	if err != nil {
 		t.Fatalf("failed to create temp dir: %v", err)
 	}
 	defer os.RemoveAll(tempDir)
 
-	// Create fixture files simulating:
-	// 1. Normal chain: blocks 100 -> 101 -> 102
-	// 2. Reorg: new block 102' forks from 100
 	fixtures := createReorgFixtures()
 	for i, fixture := range fixtures {
 		filename := filepath.Join(tempDir, fixture.filename)
@@ -46,17 +36,14 @@ func TestDeterministicReplayWithReorg(t *testing.T) {
 		}
 	}
 
-	// Set up FileSource
 	fileSource := replay.NewFileSource(replay.FileSourceConfig{
 		Chain:       "evm",
 		FixturesDir: tempDir,
 		Loop:        false,
 	}, logger)
 
-	// Set up ReorgDetector
 	detector := NewReorgDetector(DefaultReorgDetectorConfig(), logger)
 
-	// Track all events and reorg events
 	var allEvents []adapter.Event
 	var reorgEvents []*ReorgEvent
 
@@ -65,7 +52,6 @@ func TestDeterministicReplayWithReorg(t *testing.T) {
 		return nil
 	})
 
-	// Stream events from FileSource
 	eventCh := make(chan adapter.Event, 100)
 
 	go func() {
@@ -75,11 +61,9 @@ func TestDeterministicReplayWithReorg(t *testing.T) {
 		}
 	}()
 
-	// Process all events through ReorgDetector
 	for event := range eventCh {
 		allEvents = append(allEvents, event)
 
-		// Only process block events
 		if event.EventType == "block" && event.BlockHash != "" {
 			_, err := detector.ProcessAdapterEvent(ctx, event)
 			if err != nil {
@@ -88,12 +72,10 @@ func TestDeterministicReplayWithReorg(t *testing.T) {
 		}
 	}
 
-	// Verify we received all events
 	if len(allEvents) < 4 {
 		t.Errorf("expected at least 4 events, got %d", len(allEvents))
 	}
 
-	// Verify reorg was detected
 	if len(reorgEvents) != 1 {
 		t.Fatalf("expected 1 reorg event, got %d", len(reorgEvents))
 	}
@@ -102,12 +84,10 @@ func TestDeterministicReplayWithReorg(t *testing.T) {
 	t.Logf("Reorg detected: fork_point=%d, depth=%d, orphaned=%v",
 		reorg.ForkPoint, reorg.Depth, reorg.OrphanedBlocks)
 
-	// Verify fork point is block 100
 	if reorg.ForkPoint != 100 {
 		t.Errorf("expected fork point 100, got %d", reorg.ForkPoint)
 	}
 
-	// Verify orphaned blocks include 101 and 102
 	orphanedSet := make(map[uint64]bool)
 	for _, b := range reorg.OrphanedBlocks {
 		orphanedSet[b] = true
@@ -117,21 +97,18 @@ func TestDeterministicReplayWithReorg(t *testing.T) {
 	}
 }
 
-// TestReorgEventSequence verifies the correct sequence of events during a reorg.
 func TestReorgEventSequence(t *testing.T) {
 	ctx := context.Background()
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
 
 	detector := NewReorgDetector(DefaultReorgDetectorConfig(), logger)
 
-	// Build canonical chain: 100 -> 101 -> 102
 	canonicalBlocks := []*BlockInfo{
 		{Number: 100, Hash: "0xblock100_aaaa000000000000000000000000000000000000000000000", ParentHash: "0xblock99_0000000000000000000000000000000000000000000000000", Timestamp: 1000},
 		{Number: 101, Hash: "0xblock101_aaaa000000000000000000000000000000000000000000000", ParentHash: "0xblock100_aaaa000000000000000000000000000000000000000000000", Timestamp: 1012},
 		{Number: 102, Hash: "0xblock102_aaaa000000000000000000000000000000000000000000000", ParentHash: "0xblock101_aaaa000000000000000000000000000000000000000000000", Timestamp: 1024},
 	}
 
-	// Process canonical chain
 	for _, block := range canonicalBlocks {
 		_, err := detector.ProcessBlock(ctx, block)
 		if err != nil {
@@ -139,7 +116,6 @@ func TestReorgEventSequence(t *testing.T) {
 		}
 	}
 
-	// Simulate events in the canonical chain
 	canonicalEvents := []*protov1.CanonicalEvent{
 		{EventId: "evt_100_1", BlockNumber: 100, TxIndex: 0, EventIndex: 0, Chain: protov1.Chain_CHAIN_ETHEREUM},
 		{EventId: "evt_101_1", BlockNumber: 101, TxIndex: 0, EventIndex: 0, Chain: protov1.Chain_CHAIN_ETHEREUM},
@@ -147,11 +123,10 @@ func TestReorgEventSequence(t *testing.T) {
 		{EventId: "evt_102_1", BlockNumber: 102, TxIndex: 0, EventIndex: 0, Chain: protov1.Chain_CHAIN_ETHEREUM},
 	}
 
-	// Trigger reorg with new block 102' that forks from block 100
 	forkBlock := &BlockInfo{
 		Number:     102,
-		Hash:       "0xblock102_bbbb000000000000000000000000000000000000000000000", // Different hash
-		ParentHash: "0xblock100_aaaa000000000000000000000000000000000000000000000", // Forks from 100
+		Hash:       "0xblock102_bbbb000000000000000000000000000000000000000000000",
+		ParentHash: "0xblock100_aaaa000000000000000000000000000000000000000000000",
 		Timestamp:  1030,
 	}
 
@@ -164,36 +139,29 @@ func TestReorgEventSequence(t *testing.T) {
 		t.Fatal("expected reorg to be detected")
 	}
 
-	// Generate retraction events
 	retractions := detector.CreateRetractionEvents(reorg, canonicalEvents)
 
-	// Verify we have 3 retractions (events from blocks 101 and 102)
 	if len(retractions) != 3 {
 		t.Errorf("expected 3 retractions, got %d", len(retractions))
 	}
 
-	// Verify all retractions have RETRACT action
 	for _, r := range retractions {
 		if r.ReorgAction != protov1.ReorgAction_REORG_ACTION_RETRACT {
 			t.Errorf("expected RETRACT action, got %v", r.ReorgAction)
 		}
-		// Verify event ID format
 		expectedSuffix := ":retract"
 		if len(r.EventId) < len(expectedSuffix) || r.EventId[len(r.EventId)-len(expectedSuffix):] != expectedSuffix {
 			t.Errorf("retraction event ID should end with :retract, got %s", r.EventId)
 		}
 	}
 
-	// Simulate events from the new canonical chain
 	newCanonicalEvents := []*protov1.CanonicalEvent{
 		{EventId: "evt_102b_1", BlockNumber: 102, TxIndex: 0, EventIndex: 0, Chain: protov1.Chain_CHAIN_ETHEREUM},
 		{EventId: "evt_102b_2", BlockNumber: 102, TxIndex: 1, EventIndex: 0, Chain: protov1.Chain_CHAIN_ETHEREUM},
 	}
 
-	// Generate replacement events
 	replacements := detector.CreateReplacementEvents(reorg, retractions, newCanonicalEvents)
 
-	// Verify replacements
 	if len(replacements) != 2 {
 		t.Errorf("expected 2 replacements, got %d", len(replacements))
 	}
@@ -208,14 +176,12 @@ func TestReorgEventSequence(t *testing.T) {
 		len(retractions), len(replacements))
 }
 
-// TestOutboxSequenceOrdering verifies that events maintain correct ordering.
 func TestOutboxSequenceOrdering(t *testing.T) {
 	ctx := context.Background()
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
 
 	detector := NewReorgDetector(DefaultReorgDetectorConfig(), logger)
 
-	// Track event order
 	var eventSequence []string
 
 	detector.OnReorg(func(ctx context.Context, event *ReorgEvent) error {
@@ -223,7 +189,6 @@ func TestOutboxSequenceOrdering(t *testing.T) {
 		return nil
 	})
 
-	// Process blocks
 	blocks := []*BlockInfo{
 		{Number: 100, Hash: "0xh100_000000000000000000000000000000000000000000000000", ParentHash: "0xh99_0000000000000000000000000000000000000000000000000", Timestamp: 1000},
 		{Number: 101, Hash: "0xh101_000000000000000000000000000000000000000000000000", ParentHash: "0xh100_000000000000000000000000000000000000000000000000", Timestamp: 1012},
@@ -238,7 +203,6 @@ func TestOutboxSequenceOrdering(t *testing.T) {
 		eventSequence = append(eventSequence, "BLOCK_"+string(rune('0'+block.Number-100+48)))
 	}
 
-	// Trigger reorg
 	forkBlock := &BlockInfo{
 		Number:     102,
 		Hash:       "0xhFORK_0000000000000000000000000000000000000000000000",
@@ -253,7 +217,6 @@ func TestOutboxSequenceOrdering(t *testing.T) {
 
 	t.Logf("Event sequence: %v", eventSequence)
 
-	// Verify reorg was detected in sequence
 	reorgIdx := -1
 	for i, e := range eventSequence {
 		if e == "REORG_DETECTED" {
@@ -266,19 +229,16 @@ func TestOutboxSequenceOrdering(t *testing.T) {
 		t.Error("REORG_DETECTED not found in sequence")
 	}
 
-	// Verify sequence: blocks before reorg, then reorg detection
 	if reorgIdx < 3 {
 		t.Error("REORG_DETECTED should come after initial blocks")
 	}
 }
 
-// fixtureEntry represents a test fixture file.
 type fixtureEntry struct {
 	filename string
 	data     interface{}
 }
 
-// createReorgFixtures creates fixture data simulating a reorg scenario.
 func createReorgFixtures() []fixtureEntry {
 	now := time.Now()
 
@@ -335,7 +295,6 @@ func createReorgFixtures() []fixtureEntry {
 			},
 		},
 		{
-			// Reorg: new block 102' that forks from block 100
 			filename: "block_102_reorg.json",
 			data: map[string]interface{}{
 				"chain":       "evm",
@@ -343,8 +302,8 @@ func createReorgFixtures() []fixtureEntry {
 				"recorded_at": now.Format(time.RFC3339),
 				"data": map[string]interface{}{
 					"number":       102,
-					"hash":         "0xblock102_bbbb000000000000000000000000000000000000000000000", // Different hash
-					"parent_hash":  "0xblock100_aaaa000000000000000000000000000000000000000000000", // Forks from 100
+					"hash":         "0xblock102_bbbb000000000000000000000000000000000000000000000",
+					"parent_hash":  "0xblock100_aaaa000000000000000000000000000000000000000000000",
 					"timestamp":    now.Unix(),
 					"gas_limit":    30000000,
 					"gas_used":     20000000,

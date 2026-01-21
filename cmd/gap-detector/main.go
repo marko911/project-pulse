@@ -1,6 +1,3 @@
-// Package main implements the Gap Detector service.
-// This service monitors finalized topics on Redpanda and detects missing blocks.
-// If a gap is detected, it emits alerts and halts processing (fail-closed design).
 package main
 
 import (
@@ -16,7 +13,6 @@ import (
 )
 
 func main() {
-	// Configuration flags
 	var (
 		brokers       = flag.String("brokers", envOrDefault("KAFKA_BROKERS", "localhost:9092"), "Redpanda/Kafka brokers (comma-separated)")
 		topics        = flag.String("topics", envOrDefault("TOPICS", "finalized-events"), "Topics to monitor (comma-separated)")
@@ -30,7 +26,6 @@ func main() {
 	)
 	flag.Parse()
 
-	// Setup structured logging
 	var level slog.Level
 	switch *logLevel {
 	case "debug":
@@ -57,19 +52,16 @@ func main() {
 		"max_gap_blocks", *maxGapBlocks,
 	)
 
-	// Parse topics
 	topicList := strings.Split(*topics, ",")
 	for i := range topicList {
 		topicList[i] = strings.TrimSpace(topicList[i])
 	}
 
-	// Parse brokers
 	brokerList := strings.Split(*brokers, ",")
 	for i := range brokerList {
 		brokerList[i] = strings.TrimSpace(brokerList[i])
 	}
 
-	// Create detector configuration
 	cfg := DetectorConfig{
 		Brokers:       brokerList,
 		Topics:        topicList,
@@ -81,18 +73,15 @@ func main() {
 		MaxGapBlocks:  *maxGapBlocks,
 	}
 
-	// Create and initialize detector
 	detector, err := NewDetector(cfg, logger)
 	if err != nil {
 		slog.Error("failed to create detector", "error", err)
 		os.Exit(1)
 	}
 
-	// Setup context with signal handling
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	// Handle shutdown signals
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 
@@ -102,13 +91,11 @@ func main() {
 		cancel()
 	}()
 
-	// Run the detector (blocks until context is cancelled or fatal error)
 	if err := detector.Run(ctx); err != nil && ctx.Err() == nil {
 		slog.Error("detector fatal error", "error", err)
 		os.Exit(1)
 	}
 
-	// Graceful shutdown
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer shutdownCancel()
 

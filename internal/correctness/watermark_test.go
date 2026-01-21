@@ -9,7 +9,6 @@ import (
 	protov1 "github.com/marko911/project-pulse/pkg/proto/v1"
 )
 
-// mockCorrectnessChecker implements CorrectnessChecker for testing.
 type mockCorrectnessChecker struct {
 	verified map[uint64]bool
 	err      error
@@ -85,7 +84,7 @@ func TestWatermarkController_GetWatermark_Uninitialized(t *testing.T) {
 
 func TestWatermarkController_Advance_NoVerification(t *testing.T) {
 	cfg := DefaultWatermarkConfig()
-	cfg.RequireVerification = false // Disable for this test
+	cfg.RequireVerification = false
 	w := NewWatermarkController(cfg, nil)
 
 	chain := protov1.Chain_CHAIN_ETHEREUM
@@ -131,7 +130,6 @@ func TestWatermarkController_Advance_UnverifiedBlock(t *testing.T) {
 	w := NewWatermarkController(cfg, nil)
 
 	checker := newMockChecker()
-	// Block 150 is NOT verified
 	w.SetCorrectnessChecker(checker)
 
 	chain := protov1.Chain_CHAIN_ETHEREUM
@@ -146,13 +144,11 @@ func TestWatermarkController_Advance_UnverifiedBlock(t *testing.T) {
 		t.Errorf("expected ErrNoCorrectnessCheck, got %v", err)
 	}
 
-	// Watermark should not have advanced
 	watermark := w.GetWatermark(chain)
 	if watermark != 100 {
 		t.Errorf("expected watermark still 100, got %d", watermark)
 	}
 
-	// But pending should have updated
 	state := w.GetState(chain)
 	if state.PendingWatermark != 150 {
 		t.Errorf("expected pending 150, got %d", state.PendingWatermark)
@@ -184,7 +180,6 @@ func TestWatermarkController_Halt(t *testing.T) {
 	chain := protov1.Chain_CHAIN_ETHEREUM
 	w.InitializeChain(chain, 100)
 
-	// Trigger halt
 	w.Halt(HaltSourceGapDetector, chain, 101, "missing block 101")
 
 	if !w.IsHalted() {
@@ -199,7 +194,6 @@ func TestWatermarkController_Halt(t *testing.T) {
 		t.Errorf("expected source gap_detector, got %s", conditions[0].Source)
 	}
 
-	// State should also be halted
 	state := w.GetState(chain)
 	if !state.Halted {
 		t.Error("expected chain state to be halted")
@@ -214,10 +208,8 @@ func TestWatermarkController_Halt_BlocksAdvance(t *testing.T) {
 	chain := protov1.Chain_CHAIN_ETHEREUM
 	w.InitializeChain(chain, 100)
 
-	// Trigger halt
 	w.Halt(HaltSourceReconciler, chain, 101, "mismatch at block 101")
 
-	// Try to advance
 	ctx := context.Background()
 	err := w.AdvanceWatermark(ctx, chain, 150)
 	if err == nil {
@@ -227,7 +219,6 @@ func TestWatermarkController_Halt_BlocksAdvance(t *testing.T) {
 		t.Errorf("expected ErrWatermarkHalted, got %v", err)
 	}
 
-	// Watermark should not have changed
 	watermark := w.GetWatermark(chain)
 	if watermark != 100 {
 		t.Errorf("expected watermark still 100, got %d", watermark)
@@ -242,14 +233,12 @@ func TestWatermarkController_ResolveHalt(t *testing.T) {
 	chain := protov1.Chain_CHAIN_ETHEREUM
 	w.InitializeChain(chain, 100)
 
-	// Trigger halt
 	w.Halt(HaltSourceGapDetector, chain, 101, "gap detected")
 
 	if !w.IsHalted() {
 		t.Error("expected halted")
 	}
 
-	// Resolve
 	err := w.ResolveHalt(HaltSourceGapDetector, "backfill completed")
 	if err != nil {
 		t.Fatalf("resolve failed: %v", err)
@@ -259,7 +248,6 @@ func TestWatermarkController_ResolveHalt(t *testing.T) {
 		t.Error("expected not halted after resolution")
 	}
 
-	// Should be able to advance now
 	ctx := context.Background()
 	err = w.AdvanceWatermark(ctx, chain, 150)
 	if err != nil {
@@ -284,7 +272,6 @@ func TestWatermarkController_MultipleHalts(t *testing.T) {
 	chain := protov1.Chain_CHAIN_ETHEREUM
 	w.InitializeChain(chain, 100)
 
-	// Multiple halts
 	w.Halt(HaltSourceGapDetector, chain, 101, "gap")
 	w.Halt(HaltSourceReconciler, chain, 102, "mismatch")
 
@@ -293,10 +280,8 @@ func TestWatermarkController_MultipleHalts(t *testing.T) {
 		t.Fatalf("expected 2 halt conditions, got %d", len(conditions))
 	}
 
-	// Resolve one
 	w.ResolveHalt(HaltSourceGapDetector, "fixed")
 
-	// Still halted
 	if !w.IsHalted() {
 		t.Error("expected still halted with one remaining condition")
 	}
@@ -306,7 +291,6 @@ func TestWatermarkController_MultipleHalts(t *testing.T) {
 		t.Fatalf("expected 1 remaining condition, got %d", len(conditions))
 	}
 
-	// Resolve remaining
 	w.ResolveHalt(HaltSourceReconciler, "fixed")
 
 	if w.IsHalted() {
@@ -325,13 +309,11 @@ func TestWatermarkController_MaxPendingBlocks(t *testing.T) {
 
 	ctx := context.Background()
 
-	// Within limit
 	err := w.AdvanceWatermark(ctx, chain, 105)
 	if err != nil {
 		t.Fatalf("expected success within limit: %v", err)
 	}
 
-	// Exceeds limit (100 + 10 = 110, trying 120)
 	err = w.AdvanceWatermark(ctx, chain, 120)
 	if err == nil {
 		t.Error("expected error for exceeding max pending")
@@ -383,7 +365,6 @@ func TestWatermarkController_Callback(t *testing.T) {
 
 	select {
 	case <-callbackCalled:
-		// Success
 	case <-time.After(1 * time.Second):
 		t.Error("callback not called within timeout")
 	}
@@ -396,19 +377,15 @@ func TestWatermarkController_IntegrateGapDetector(t *testing.T) {
 	chain := protov1.Chain_CHAIN_ETHEREUM
 	w.InitializeChain(chain, 100)
 
-	// Create gap detector
 	gdCfg := DefaultGapDetectorConfig()
 	gd := NewGapDetector(gdCfg, nil)
 
-	// Integrate
 	w.IntegrateGapDetector(gd)
 
-	// Simulate gap detection
 	ctx := context.Background()
 	gd.processBlock(ctx, "ethereum", protov1.CommitmentLevel_COMMITMENT_LEVEL_FINALIZED, 100, "hash100")
-	gd.processBlock(ctx, "ethereum", protov1.CommitmentLevel_COMMITMENT_LEVEL_FINALIZED, 105, "hash105") // Gap!
+	gd.processBlock(ctx, "ethereum", protov1.CommitmentLevel_COMMITMENT_LEVEL_FINALIZED, 105, "hash105")
 
-	// Watermark controller should be halted
 	if !w.IsHalted() {
 		t.Error("expected watermark controller to be halted after gap detection")
 	}
